@@ -277,7 +277,7 @@ class FAP_Poster {
         $excerpt_tpl = fap_slot_opt($slot, 'excerpt_tpl', '');
         $template    = $this->get_template($slot, array_column($d['genre_arr'], 'name'));
 
-        $post_title   = trim($this->replace_text($title_tpl, $d));
+        $post_title   = $this->render_title($title_tpl, $d);
         $post_excerpt = $excerpt_tpl ? trim($this->replace_text($excerpt_tpl, $d)) : '';
         $post_content = $this->replace_all($template ?: $this->default_content($d), $d);
 
@@ -370,7 +370,7 @@ class FAP_Poster {
         $template    = $this->get_template($slot, array_column($d['genre_arr'], 'name'));
 
         // タイトル・抜粋・本文の生成
-        $post_title   = trim($this->replace_text($title_tpl, $d));
+        $post_title   = $this->render_title($title_tpl, $d);
         $post_excerpt = $excerpt_tpl ? trim($this->replace_text($excerpt_tpl, $d)) : '';
         $post_content = $this->replace_all($template ?: $this->default_content($d), $d);
 
@@ -450,6 +450,7 @@ class FAP_Poster {
         $meta = [
             '_fap_cid'           => $cid,
             '_fap_title'         => $title,
+            '_fap_title_tpl'     => $title_tpl, // セール検知時に同じテンプレートで描き直すため
             '_fap_actress'       => implode(', ', array_column($actress_arr,   'name')),
             '_fap_performer'     => implode(', ', array_column($performer_arr, 'name')),
             '_fap_maker'         => implode(', ', array_column($maker_arr,     'name')),
@@ -588,7 +589,7 @@ class FAP_Poster {
     // テキスト変数置換（タイトル・抜粋用）
     // -----------------------------------------------------------------------
     private function replace_text(string $tpl, array $d): string {
-        // タイトル・抜粋は投稿時点の値で確定するため、セール条件タグもここで静的に解決する
+        // タイトル・抜粋はここで描画するため、セール条件タグも静的に解決する
         $tpl = $this->resolve_sale_conditionals($tpl, (string) ($d['sale_price'] ?? ''));
 
         // タイトル・抜粋用：[comment] は HTML を除去してテキストにする
@@ -599,7 +600,7 @@ class FAP_Poster {
     }
 
     // [fap_if_sale]〜[/fap_if_sale] / [fap_if_not_sale]〜[/fap_if_not_sale] を静的に解決する
-    // （ショートコードが効かないタイトル・抜粋用。結果は保存時点で確定する）
+    // （ショートコードが効かないタイトル・抜粋用。描画した時点のセール状態で確定する）
     private function resolve_sale_conditionals(string $tpl, string $sale_price): string {
         if ($sale_price !== '') {
             $tpl = str_replace(['[fap_if_sale]', '[/fap_if_sale]'], '', $tpl);
@@ -609,6 +610,68 @@ class FAP_Poster {
             $tpl = preg_replace('/\[fap_if_sale\].*?\[\/fap_if_sale\]/s', '', $tpl);
         }
         return $tpl;
+    }
+
+    // -----------------------------------------------------------------------
+    // タイトル専用タグ [sale_title_1]〜[sale_title_3]（PREMIUM）
+    // セール中だけ、設定「セール中タイトル1〜3」の文言に置換される。セール中でなければ空。
+    // 文言の中では [discount-rate] [sale-price] [price] などの変数が使える。
+    // タイトル以外（本文・抜粋など）では展開しない。
+    // -----------------------------------------------------------------------
+    private function expand_sale_title_tags(string $tpl, array $d): string {
+        if (strpos($tpl, '[sale_title_') === false) return $tpl;
+
+        $on_sale = FAP_License::is('premium') && (string) ($d['sale_price'] ?? '') !== '';
+        $map = [];
+        foreach ([1, 2, 3] as $n) {
+            $default = $n === 1 ? '【セール中】' : '';
+            $map['[sale_title_' . $n . ']'] = $on_sale ? trim((string) fap_opt('sale_title_' . $n, $default)) : '';
+        }
+        return strtr($tpl, $map);
+    }
+
+    // タイトルテンプレートを描画する（投稿時・プレビュー・セール検知の再描画で共通）
+    private function render_title(string $tpl, array $d): string {
+        $title = $this->replace_text($this->expand_sale_title_tags($tpl, $d), $d);
+
+        // 自動付与（従来動作）: 設定ONかつセール中なら「セール中タイトル1」を先頭に付ける。
+        // [sale_title_N] との重複は、テンプレート側で利用者が制御する。
+        if (FAP_License::is('premium')
+            && fap_opt('sale_auto_prefix', '1') === '1'
+            && (string) ($d['sale_price'] ?? '') !== '') {
+            $prefix = trim($this->replace_text((string) fap_opt('sale_title_1', '【セール中】'), $d));
+            if ($prefix !== '') $title = $prefix . $title;
+        }
+        // 割引率が取れず空になった場合の「【】」を除去
+        $title = preg_replace('/【\s*】/u', '', $title);
+        return trim($title);
+    }
+
+    // 既存投稿のタイトルを、投稿時と同じタイトルテンプレートで「今の状態」に描画し直す。
+    // 投稿時に使ったテンプレートは _fap_title_tpl に保存してある（無ければスロットの「投稿タイトル」）。
+    private function render_title_for_post(int $post_id, object $item): string {
+        $slot      = (int)    get_post_meta($post_id, '_fap_slot',    true);
+        $service   = (string) get_post_meta($post_id, '_fap_service', true);
+        $floor_key = (string) get_post_meta($post_id, '_fap_floor',   true);
+        if ($slot < 1) return '';
+
+        $fp = FAP_API::parse_floor_key($floor_key);
+        $d  = $this->assemble_data($item, $slot, $service ?: $fp['service'], $fp['floor']);
+        if ($d === null) return '';
+
+        $tpl = (string) get_post_meta($post_id, '_fap_title_tpl', true);
+        if ($tpl === '') {
+            $tpl = fap_slot_opt($slot, 'title_tpl', '[title]') ?: '[title]';
+        }
+        return wp_strip_all_tags($this->render_title($tpl, $d));
+    }
+
+    // タイトルだけを描画し直して保存する（セール中の値下げ・セール終了後の掃除用）
+    private function refresh_title(int $post_id, object $item): void {
+        if (fap_opt('ai_auto_sale', '0') === '1') return; // AIがタイトルを管理している場合は触らない
+        $new = $this->render_title_for_post($post_id, $item);
+        if ($new === '' || $new === (string) get_post_field('post_title', $post_id, 'raw')) return;
+        wp_update_post(['ID' => $post_id, 'post_title' => $new]);
     }
 
     private function text_map(array $d): array {
@@ -1569,12 +1632,12 @@ class FAP_Poster {
             if ($is_on_sale && !$was_on_sale) {
                 $sale_price = '';
                 if ($item && isset($item->prices->price)) $sale_price = (string) $item->prices->price;
-                $this->apply_sale_badge($post->ID, $sale_price, $list_price > 0 ? (string) $list_price : '');
+                $this->apply_sale_badge($post->ID, $sale_price, $item);
                 FAP_Sale_History::log($cid, $post->ID, 'start', $list_price, (int) $sale_price);
                 if ($rerender && $item && $this->rerender_content($post->ID, $item)) $rerendered++;
                 $sale_found++;
             } elseif (!$is_on_sale && $was_on_sale) {
-                $this->remove_sale_badge($post->ID);
+                $this->remove_sale_badge($post->ID, $item);
                 FAP_Sale_History::log($cid, $post->ID, 'end', $list_price, 0);
                 if ($rerender && $item && $this->rerender_content($post->ID, $item)) $rerendered++;
                 $sale_ended++;
@@ -1585,23 +1648,13 @@ class FAP_Poster {
                 if ($new_price > 0 && $cur_price > 0 && $new_price !== $cur_price) {
                     update_post_meta($post->ID, '_fap_sale_price', (string) $new_price);
                     FAP_Sale_History::log($cid, $post->ID, 'price', $list_price, $new_price);
-                    // タイトルに割引率・セール価格を使っている場合は、値下げ後の値に更新する
-                    // （AIリライトでタイトルを生成している場合は上書きしない）
-                    if (fap_opt('ai_auto_sale', '0') !== '1'
-                        && preg_match('/\[(discount-rate|sale-price)\]/', (string) fap_opt('sale_title_tpl', ''))) {
-                        $orig_title = (string) get_post_meta($post->ID, '_fap_original_title', true);
-                        if ($orig_title) {
-                            wp_update_post([
-                                'ID'         => $post->ID,
-                                'post_title' => $this->build_sale_title($orig_title, $list_price > 0 ? (string) $list_price : '', (string) $new_price),
-                            ]);
-                        }
-                    }
+                    if ($item) $this->refresh_title($post->ID, $item); // タイトルの割引率・価格を最新化
                     fap_log('[SaleCheck] セール価格変更 post_id=' . $post->ID . ' ' . $cur_price . '→' . $new_price);
                 }
             } elseif (!$is_on_sale && (string) get_post_meta($post->ID, '_fap_sale_price', true) !== '') {
                 // 投稿時にセール中だったが、初回チェック前にセールが終了していた場合の掃除
                 update_post_meta($post->ID, '_fap_sale_price', '');
+                if ($item) $this->refresh_title($post->ID, $item); // 投稿時に入ったセール文言を外す
                 if ($rerender && $item && $this->rerender_content($post->ID, $item)) $rerendered++;
             }
             $processed++;
@@ -1708,41 +1761,21 @@ class FAP_Poster {
         ];
     }
 
-    // セール中タイトルを生成する。設定「セール中タイトル」のテンプレートを使用。
-    // 使える変数: [title]（元タイトル） [discount-rate]（例: 30%OFF） [sale-price] [price]（定価）
-    // [title] が含まれていなければ、テンプレートを元タイトルの前に付ける。
-    private function build_sale_title(string $original, string $list_price, string $sale_price): string {
-        $tpl = trim((string) fap_opt('sale_title_tpl', '【セール中】[title]'));
-        if ($tpl === '') $tpl = '【セール中】[title]';
-        if (!str_contains($tpl, '[title]')) $tpl .= '[title]';
-
-        $title = strtr($tpl, [
-            '[title]'         => $original,
-            '[discount-rate]' => fap_discount_rate($list_price, $sale_price),
-            '[sale-price]'    => $sale_price,
-            '[price]'         => $list_price,
-        ]);
-        // 割引率が取れず空になった場合の「【】」を除去
-        $title = preg_replace('/【\s*】/u', '', $title);
-        return trim($title);
-    }
-
-    private function apply_sale_badge(int $post_id, string $sale_price, string $list_price = ''): void {
-        $original = get_post_meta($post_id, '_fap_original_title', true);
-        if (!$original) {
-            $original = get_the_title($post_id);
-            update_post_meta($post_id, '_fap_original_title', $original);
-        }
-
-        if ($list_price === '') {
-            $list_price = (string) get_post_meta($post_id, '_fap_price', true);
-        }
-        $new_title   = $this->build_sale_title($original, $list_price, $sale_price);
+    // セール開始時の処理。
+    // タイトルは「投稿時と同じタイトルテンプレート」をセール状態で描き直して決める
+    // （[sale_title_1]〜[sale_title_3] や [fap_if_sale] を使っていればここで反映される）。
+    private function apply_sale_badge(int $post_id, string $sale_price, ?object $item = null): void {
+        $new_title   = $item ? $this->render_title_for_post($post_id, $item) : '';
         $new_content = null;
 
         if (fap_opt('ai_auto_sale', '0') === '1') {
             $post = get_post($post_id);
             if ($post) {
+                $original = get_post_meta($post_id, '_fap_original_title', true);
+                if (!$original) {
+                    $original = get_the_title($post_id);
+                    update_post_meta($post_id, '_fap_original_title', $original);
+                }
                 // 元の本文をまだ保存していなければ保存しておく（セール終了時に復元するため）
                 if (!get_post_meta($post_id, '_fap_original_content', true)) {
                     update_post_meta($post_id, '_fap_original_content', $post->post_content);
@@ -1760,12 +1793,17 @@ class FAP_Poster {
             }
         }
 
-        $update = ['ID' => $post_id, 'post_title' => $new_title];
+        $update = ['ID' => $post_id];
+        if ($new_title !== '' && $new_title !== (string) get_post_field('post_title', $post_id, 'raw')) {
+            $update['post_title'] = $new_title;
+        }
         if ($new_content !== null) $update['post_content'] = $new_content;
-        $result = wp_update_post($update);
-        if (!$result || is_wp_error($result)) {
-            fap_log('[SaleCheck] タイトル更新失敗 post_id=' . $post_id);
-            return;
+        if (count($update) > 1) {
+            $result = wp_update_post($update);
+            if (!$result || is_wp_error($result)) {
+                fap_log('[SaleCheck] タイトル更新失敗 post_id=' . $post_id);
+                return;
+            }
         }
 
         update_post_meta($post_id, '_fap_on_sale',    '1');
@@ -1780,12 +1818,22 @@ class FAP_Poster {
         fap_log('[SaleCheck] セール検知 post_id=' . $post_id . ' price=' . $sale_price);
     }
 
-    private function remove_sale_badge(int $post_id): void {
+    // セール終了時の処理。
+    // AIリライト（セール時自動リライト）を使った場合は従来どおり元のタイトル・本文へ復元し、
+    // それ以外はタイトルテンプレートをセール終了状態で描き直す。
+    private function remove_sale_badge(int $post_id, ?object $item = null): void {
         $original_title   = (string) get_post_meta($post_id, '_fap_original_title',   true);
         $original_content = (string) get_post_meta($post_id, '_fap_original_content', true);
 
         $update = ['ID' => $post_id];
-        if ($original_title)   $update['post_title']   = $original_title;
+        if ($original_title && fap_opt('ai_auto_sale', '0') === '1') {
+            $update['post_title'] = $original_title;
+        } elseif ($item) {
+            $rendered = $this->render_title_for_post($post_id, $item);
+            if ($rendered !== '' && $rendered !== (string) get_post_field('post_title', $post_id, 'raw')) {
+                $update['post_title'] = $rendered;
+            }
+        }
         if ($original_content) $update['post_content'] = $original_content;
         if (count($update) > 1) {
             $result = wp_update_post($update);
