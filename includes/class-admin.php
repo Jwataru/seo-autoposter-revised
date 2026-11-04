@@ -603,6 +603,20 @@ class FAP_Admin {
                         </td>
                     </tr>
                     <tr>
+                        <th>セール中以外カテゴリ</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="nonsale_category_on" value="1" <?php checked(fap_opt('nonsale_category_on', '0'), '1') ?>>
+                                セール中でない記事にカテゴリを自動で付け外しする
+                            </label>
+                            <p style="margin:8px 0 4px;">
+                                カテゴリ名:
+                                <input type="text" name="nonsale_category_name" value="<?php echo esc_attr(fap_opt('nonsale_category_name', '通常価格')) ?>" placeholder="通常価格" style="width:200px;">
+                            </p>
+                            <p class="description">セール終了で付け、セール開始で外します。「セール中カテゴリ」を外したときに記事のカテゴリが空になり「未分類」になるのを防げます。新規投稿のほか、セール検知の巡回で既存のセール中でない記事にも順次付きます。「セール中カテゴリ」と同じ名前は使えません。</p>
+                        </td>
+                    </tr>
+                    <tr>
                         <th>前回確認日時</th>
                         <td>
                             <?php
@@ -1937,6 +1951,8 @@ class FAP_Admin {
         update_option(FAP_PREFIX . 'sale_title_3', sanitize_text_field($_POST['sale_title_3'] ?? ''));
         update_option(FAP_PREFIX . 'sale_category_on',   isset($_POST['sale_category_on']) ? '1' : '0');
         update_option(FAP_PREFIX . 'sale_category_name', sanitize_text_field($_POST['sale_category_name'] ?? 'セール中'));
+        update_option(FAP_PREFIX . 'nonsale_category_on',   isset($_POST['nonsale_category_on']) ? '1' : '0');
+        update_option(FAP_PREFIX . 'nonsale_category_name', sanitize_text_field($_POST['nonsale_category_name'] ?? '通常価格'));
         update_option(FAP_PREFIX . 'notify_on_error', isset($_POST['notify_on_error']) ? '1' : '0');
         update_option(FAP_PREFIX . 'notify_email',    sanitize_email($_POST['notify_email'] ?? ''));
 

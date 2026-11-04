@@ -429,6 +429,10 @@ class FAP_Poster {
         if (($d['sale_price'] ?? '') !== '' && $this->sale_category_id() > 0) {
             $cat_ids[] = $this->sale_category_id();
             $cat_ids   = array_unique($cat_ids);
+        } elseif (($d['sale_price'] ?? '') === '' && $this->nonsale_category_id() > 0) {
+            // セール中でない作品には「セール中以外」カテゴリを自動付与（設定ON時）
+            $cat_ids[] = $this->nonsale_category_id();
+            $cat_ids   = array_unique($cat_ids);
         }
         if ($cat_ids) wp_set_post_categories($post_id, $cat_ids);
         if ($tag_ids) {
@@ -1646,8 +1650,12 @@ class FAP_Poster {
             } elseif (!$is_on_sale && (string) get_post_meta($post->ID, '_fap_sale_price', true) !== '') {
                 // 投稿時にセール中だったが、初回チェック前にセールが終了していた場合の掃除
                 update_post_meta($post->ID, '_fap_sale_price', '');
+                $this->sync_sale_categories($post->ID, false); // セールカテゴリを外し、セール中以外カテゴリへ
                 if ($item) $this->refresh_title($post->ID, $item); // 投稿時に入ったセール文言を外す
                 if ($rerender && $item && $this->rerender_content($post->ID, $item)) $rerendered++;
+            } elseif ($item && !$is_on_sale && $this->nonsale_category_id() > 0 && !has_category($this->nonsale_category_id(), $post->ID)) {
+                // セール中でない既存記事に、セール中以外カテゴリを付与（検知の巡回で順次反映）
+                $this->sync_sale_categories($post->ID, false);
             }
             $processed++;
         }
@@ -1801,11 +1809,8 @@ class FAP_Poster {
         update_post_meta($post_id, '_fap_on_sale',    '1');
         update_post_meta($post_id, '_fap_sale_price', $sale_price);
 
-        // 「セール中」カテゴリを付与（設定ON時）
-        $sale_cat = $this->sale_category_id();
-        if ($sale_cat > 0) {
-            wp_set_post_categories($post_id, [$sale_cat], true); // append
-        }
+        // 「セール中」カテゴリを付与し、「セール中以外」カテゴリを外す（各設定ON時）
+        $this->sync_sale_categories($post_id, true);
 
         fap_log('[SaleCheck] セール検知 post_id=' . $post_id . ' price=' . $sale_price);
     }
@@ -1837,11 +1842,8 @@ class FAP_Poster {
         update_post_meta($post_id, '_fap_on_sale',    '0');
         update_post_meta($post_id, '_fap_sale_price', '');
 
-        // 「セール中」カテゴリを外す（設定ON時。カテゴリ名変更後の旧カテゴリは対象外）
-        $sale_cat = $this->sale_category_id();
-        if ($sale_cat > 0) {
-            wp_remove_object_terms($post_id, $sale_cat, 'category');
-        }
+        // 「セール中」カテゴリを外し、「セール中以外」カテゴリを付ける（各設定ON時。カテゴリ名変更後の旧カテゴリは対象外）
+        $this->sync_sale_categories($post_id, false);
 
         fap_log('[SaleCheck] セール終了 post_id=' . $post_id);
     }
@@ -1853,6 +1855,30 @@ class FAP_Poster {
         if (fap_opt('sale_category_on', '0') !== '1') return 0;
         $name = trim((string) fap_opt('sale_category_name', 'セール中')) ?: 'セール中';
         return $this->ensure_category($name);
+    }
+
+    // 「セール中以外」カテゴリのID（設定OFFなら0）。セール中カテゴリと同名の場合も0（取り違え防止）
+    private function nonsale_category_id(): int {
+        if (fap_opt('nonsale_category_on', '0') !== '1') return 0;
+        $name = trim((string) fap_opt('nonsale_category_name', '通常価格')) ?: '通常価格';
+        $sale_name = trim((string) fap_opt('sale_category_name', 'セール中')) ?: 'セール中';
+        if ($name === $sale_name) return 0;
+        return $this->ensure_category($name);
+    }
+
+    // セール状態に合わせてカテゴリを付け替える。
+    // 追加を先に行ってから外すので、カテゴリが0件になって「未分類」扱いになることはない。
+    private function sync_sale_categories(int $post_id, bool $on_sale): void {
+        $sale_cat    = $this->sale_category_id();
+        $nonsale_cat = $this->nonsale_category_id();
+
+        if ($on_sale) {
+            if ($sale_cat > 0)    wp_set_post_categories($post_id, [$sale_cat], true); // append
+            if ($nonsale_cat > 0) wp_remove_object_terms($post_id, $nonsale_cat, 'category');
+        } else {
+            if ($nonsale_cat > 0) wp_set_post_categories($post_id, [$nonsale_cat], true); // append
+            if ($sale_cat > 0)    wp_remove_object_terms($post_id, $sale_cat, 'category');
+        }
     }
 
     // -----------------------------------------------------------------------
