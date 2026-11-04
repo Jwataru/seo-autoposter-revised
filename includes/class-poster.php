@@ -1326,7 +1326,18 @@ class FAP_Poster {
             $id = $this->ensure_tag($n);
             if ($id && !in_array($n, $ex, true)) $ids[] = $id;
         }
-        foreach ($this->names_from_source($source, $d) as $n) {
+        $names    = $this->names_from_source($source, $d);
+        $src_list = is_array($source) ? $source : (($source && $source !== 'none') ? [$source] : []);
+        if ($src_list && !$names) {
+            // 情報源を選んでいるのに1件も取れなかった場合は、原因調査用に取得件数をログへ残す
+            $counts = [];
+            foreach (['genre_arr', 'actress_arr', 'director_arr', 'series_arr', 'maker_arr', 'label_arr', 'author_arr'] as $k) {
+                $counts[] = $k . '=' . count($d[$k] ?? []);
+            }
+            fap_log('[Tag] 情報源（' . implode(',', $src_list) . '）から取得0件 slot=' . $slot
+                . ' cid=' . ($d['cid'] ?? '') . ' / APIの取得件数: ' . implode(' ', $counts));
+        }
+        foreach ($names as $n) {
             $id = $this->ensure_tag($n);
             if ($id && !in_array($n, $ex, true)) $ids[] = $id;
         }
@@ -2097,7 +2108,7 @@ class FAP_Poster {
             $fetch_desc = !$skip_desc && $this->ropt('fetch_desc', '0') === '1';
             $content .= $intro_html;
             foreach ($items as $i => $item) {
-                $content .= $this->replace_ranking_item($ranking_tpl, $item, $i + 1, $service, $fetch_desc, $prev_cids);
+                $content .= $this->replace_ranking_item($ranking_tpl, $item, $i + 1, $service, $fetch_desc, $prev_cids, count($items));
                 $content .= "\n";
             }
             return $content . $outro_html;
@@ -2268,6 +2279,7 @@ class FAP_Poster {
         return strtr($tpl, [
             '[year]'  => date_i18n('Y'),
             '[month]' => date_i18n('n'),
+            '[day]'   => date_i18n('j'),
             '[date]'  => date_i18n('Y年n月j日'),
             '[count]' => (string) $count,
             '[floor]' => (string) $this->ropt('flr_name', ''),
@@ -2338,7 +2350,7 @@ class FAP_Poster {
         }
     }
 
-    private function replace_ranking_item(string $tpl, object $item, int $rank, string $service, bool $fetch_desc, array $prev_cids = []): string {
+    private function replace_ranking_item(string $tpl, object $item, int $rank, string $service, bool $fetch_desc, array $prev_cids = [], int $total = 0): string {
         $medals     = ['🥇', '🥈', '🥉'];
         $medal      = $medals[$rank - 1] ?? '';
         $rank_label = $medal ? $medal . ' 第' . $rank . '位' : '第' . $rank . '位';
@@ -2427,6 +2439,13 @@ class FAP_Poster {
 
         return strtr($tpl, [
             '[rank]'           => $rank,
+            // 記事全体の情報（タイトル・冒頭・締めと同じ変数。各作品テンプレートでも使える）
+            '[year]'           => date_i18n('Y'),
+            '[month]'          => date_i18n('n'),
+            '[day]'            => date_i18n('j'),
+            '[date]'           => date_i18n('Y年n月j日'),
+            '[count]'          => (string) $total,
+            '[floor]'          => esc_html((string) $this->ropt('flr_name', '')),
             '[medal]'          => $medal,
             '[rank-label]'     => esc_html($rank_label),
             '[rank-change]'    => $this->build_rank_change_badge($cid, $rank, $prev_cids),
