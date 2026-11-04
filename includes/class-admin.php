@@ -552,7 +552,7 @@ class FAP_Admin {
             <?php if (FAP_License::is('premium')): ?>
             <div class="fap-card" style="border-left:4px solid #9333ea;">
                 <h2>🔔 セール検知＆自動リライト <span style="background:#9333ea;color:#fff;padding:1px 8px;border-radius:999px;font-size:11px;vertical-align:middle;">PREMIUM</span></h2>
-                <p class="description">過去に投稿した記事の商品がセール中になると、タイトルに「【セール中】」を自動で追加します。セールが終わると元のタイトルに自動で戻します。</p>
+                <p class="description">過去に投稿した記事の商品がセール中になると、タイトルを下記の「セール中タイトル」に自動で書き換えます。セールが終わると元のタイトルに自動で戻します。</p>
                 <table class="form-table">
                     <tr>
                         <th>自動セール検知</th>
@@ -562,6 +562,13 @@ class FAP_Admin {
                                 1日1回、既存投稿のセール状態を自動確認する
                             </label>
                             <p class="description">自動実行スイッチがONのときのみ動作します。1時間ごとに50件ずつ処理し、全記事を1日1周確認します。</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>セール中タイトル</th>
+                        <td>
+                            <input type="text" name="sale_title_tpl" value="<?php echo esc_attr(fap_opt('sale_title_tpl', '【セール中】[title]')) ?>" placeholder="【セール中】[title]" style="width:100%;max-width:520px;">
+                            <p class="description">セール中の記事タイトルの書式です。使える変数: <code>[title]</code>（元のタイトル）、<code>[discount-rate]</code>（例: 30%OFF）、<code>[sale-price]</code>（セール価格）、<code>[price]</code>（定価）。<code>[title]</code> を含めない場合は、入力した文言が元のタイトルの前に付きます。<br>例: <code>【現在セール中】[title]</code> / <code>【[discount-rate]】[title]</code> / <code>【今だけ[discount-rate]】[title]</code><br>※AIリライト（セール時自動リライト）をONにしている場合は、AIが生成したタイトルが優先されます。</p>
                         </td>
                     </tr>
                     <tr>
@@ -1691,8 +1698,8 @@ class FAP_Admin {
                     <?php foreach ([
                         ['[sale-price]',    'セール価格（セール中のみ・通常時は空）。タイトル・抜粋では投稿時点の値、本文では表示時点の最新セール状態を自動反映'],
                         ['[discount-rate]', '割引率ラベル（例: 30%OFF）。セール中のみ・通常時は空'],
-                        ['[fap_if_sale] 〜 [/fap_if_sale]',         '囲んだ部分をセール中のみ表示（本文のみ。セール終了で自動的に非表示）'],
-                        ['[fap_if_not_sale] 〜 [/fap_if_not_sale]', '囲んだ部分をセール中でない時のみ表示（本文のみ）'],
+                        ['[fap_if_sale] 〜 [/fap_if_sale]',         '囲んだ部分をセール中のみ表示（本文：セール終了で自動的に非表示。タイトル・抜粋：投稿時点で確定するため、後から切り替えたい場合は「セール中タイトル」設定を使用）'],
+                        ['[fap_if_not_sale] 〜 [/fap_if_not_sale]', '囲んだ部分をセール中でない時のみ表示（本文・タイトル・抜粋。タイトル・抜粋は投稿時点で確定）'],
                         ['[sale-history]',  'セール履歴サマリー（過去のセール回数・平均割引率・前回セール月）。履歴が無い作品では非表示。本文のみ有効'],
                     ] as [$tag, $desc]): ?>
                     <tr>
@@ -1917,6 +1924,7 @@ class FAP_Admin {
         update_option(FAP_PREFIX . 'e_date', sanitize_text_field($_POST['e_date'] ?? ''));
         update_option(FAP_PREFIX . 'sale_check_on',  isset($_POST['sale_check_on'])  ? '1' : '0');
         update_option(FAP_PREFIX . 'sale_rerender',  isset($_POST['sale_rerender'])  ? '1' : '0');
+        update_option(FAP_PREFIX . 'sale_title_tpl', sanitize_text_field($_POST['sale_title_tpl'] ?? '【セール中】[title]'));
         update_option(FAP_PREFIX . 'sale_category_on',   isset($_POST['sale_category_on']) ? '1' : '0');
         update_option(FAP_PREFIX . 'sale_category_name', sanitize_text_field($_POST['sale_category_name'] ?? 'セール中'));
         update_option(FAP_PREFIX . 'notify_on_error', isset($_POST['notify_on_error']) ? '1' : '0');
