@@ -1,0 +1,90 @@
+/* ============================================================
+   FANZA SEO Autoposter - Front (記事ページ用)
+   FAP生成記事でのみ読み込まれる
+   ============================================================ */
+
+/* --- アフィリエイト注記（PR表記） --- */
+.fap-notice {
+    font-size: 12px;
+    line-height: 1.7;
+    color: #6b7280;
+    background: #f8f9fb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 18px;
+}
+
+/* --- セール履歴サマリー（[sale-history]） --- */
+.fap-sale-history {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #7a2e3f;
+    background: #fdf2f5;
+    border: 1px solid #f3c6d3;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 18px;
+}
+.fap-sale-history-ttl {
+    font-weight: 700;
+    color: #e0306e;
+    white-space: nowrap;
+}
+.fap-sale-history-body b { color: #c81e5b; }
+
+/* --- リンクカード（[aff-card]/[tachiyomi-card]）のホバー・折返し --- */
+.fap-link-card {
+    transition: box-shadow .16s ease, transform .16s ease;
+}
+.fap-link-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(16,24,40,.10), 0 18px 40px rgba(16,24,40,.12) !important;
+}
+@media (max-width: 480px) {
+    .fap-link-card { flex-direction: column; text-align: center; }
+    .fap-link-card img { width: 62% !important; max-width: 220px; margin: 0 auto; }
+}
+
+/* --- アフィリエイトボタン（[aff-button]等）のホバー・プレス --- */
+.fap-btn {
+    transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+}
+.fap-btn:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,.18) !important; }
+.fap-btn:active { transform: translateY(0); box-shadow: 0 2px 6px rgba(0,0,0,.18) !important; }
+
+/* --- スマホ追従CTAバー（小画面のみ表示／ボタン以外は透明） --- */
+.fap-sticky-cta {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 9990;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: transparent;          /* ボタン以外の背景は透明 */
+    transform: translateY(120%);
+    transition: transform .25s ease;
+    pointer-events: none;             /* 透明部分はクリックを透過 */
+}
+.fap-sticky-cta.is-visible { transform: translateY(0); }
+.fap-sticky-cta a {
+    pointer-events: auto;             /* ボタンはクリック可能に戻す */
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    color: #fff;                 /* 既定。実際の色はインラインで上書き */
+    font-weight: 700;
+    font-size: 16px;
+    line-height: 1.4;
+    padding: 14px 18px;
+    border-radius: 12px;
+    background: #e0306e;
+    box-shadow: 0 6px 16px rgba(0,0,0,.22);
+}
+.fap-sticky-cta a span { font-weight: 700; }
+/* PC等の広い画面では追従CTAは隠す（記事内ボタンで十分なため） */
+@media (min-width: 783px) {
+    .fap-sticky-cta { display: none; }
+}
