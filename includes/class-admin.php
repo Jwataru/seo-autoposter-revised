@@ -552,7 +552,7 @@ class FAP_Admin {
             <?php if (FAP_License::is('premium')): ?>
             <div class="fap-card" style="border-left:4px solid #9333ea;">
                 <h2>🔔 セール検知＆自動リライト <span style="background:#9333ea;color:#fff;padding:1px 8px;border-radius:999px;font-size:11px;vertical-align:middle;">PREMIUM</span></h2>
-                <p class="description">過去に投稿した記事の商品のセール状態が変わると、その記事のタイトルを「投稿タイトル／タイトルテンプレート2・3」から描き直します。セール中だけ文言を出したいときは、下の「セール中タイトル1〜3」を作り、タイトルテンプレートの中に <code>[sale_title_1]</code>〜<code>[sale_title_3]</code> として入れてください（例: <code>[sale_title_1][title]</code>）。なお、下の「セール文言の自動付与」がONなら、これとは別に「セール中タイトル1」が先頭に付きます。</p>
+                <p class="description">過去に投稿した記事の商品のセール状態が変わると、その記事のタイトルを「投稿タイトル／タイトルテンプレート2・3」から描き直します。セール中だけ文言を出したいときは、下の「セール中タイトル1〜3」を作り、タイトルテンプレートの中に <code>[sale_title_1]</code>〜<code>[sale_title_3]</code> として入れてください（例: <code>[sale_title_1][title]</code>）。セール文言は自動では付かないので、タイトルテンプレートに <code>[sale_title_N]</code> を書いた分だけ反映されます（例: <code>[sale_title_1][title][sale_title_2]</code>）。</p>
                 <table class="form-table">
                     <tr>
                         <th>自動セール検知</th>
@@ -576,16 +576,6 @@ class FAP_Admin {
                             <p class="description">セール中だけ、タイトルテンプレート内の <code>[sale_title_1]</code>〜<code>[sale_title_3]</code> がこの文言に置き換わります（セール中でなければ空になります）。<strong>タイトル専用</strong>のタグで、本文・抜粋では使えません。文言の中では <code>[discount-rate]</code>（30%OFF）・<code>[sale-price]</code>・<code>[price]</code> も使えます。<br>
                             例: 「投稿タイトル」を <code>[sale_title_1][title]</code>、「タイトルテンプレート 2」を <code>[sale_title_2][title]</code> のようにすると、実際のタイトルはタイトルテンプレートだけで決まります。<br>
                             ※AIリライト（セール時自動リライト）をONにしている場合は、AIが生成したタイトルが優先されます。</p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>セール文言の自動付与</th>
-                        <td>
-                            <label>
-                                <input type="checkbox" name="sale_auto_prefix" value="1" <?php checked(fap_opt('sale_auto_prefix', '1'), '1') ?>>
-                                セール中の記事タイトルの先頭に「セール中タイトル1」を自動で付ける
-                            </label>
-                            <p class="description">ON（初期値）: セール中は先頭に自動で付き、セール終了で外れます。OFF: 自動では付きません。どちらの場合も、タイトルテンプレートに書いた <code>[sale_title_N]</code> は反映されます。両方使うと文言が重複するので、重複しないようどちらかに調整してください。</p>
                         </td>
                     </tr>
                     <tr>
@@ -1942,7 +1932,6 @@ class FAP_Admin {
         update_option(FAP_PREFIX . 'e_date', sanitize_text_field($_POST['e_date'] ?? ''));
         update_option(FAP_PREFIX . 'sale_check_on',  isset($_POST['sale_check_on'])  ? '1' : '0');
         update_option(FAP_PREFIX . 'sale_rerender',  isset($_POST['sale_rerender'])  ? '1' : '0');
-        update_option(FAP_PREFIX . 'sale_auto_prefix', isset($_POST['sale_auto_prefix']) ? '1' : '0');
         update_option(FAP_PREFIX . 'sale_title_1', sanitize_text_field($_POST['sale_title_1'] ?? '【セール中】'));
         update_option(FAP_PREFIX . 'sale_title_2', sanitize_text_field($_POST['sale_title_2'] ?? ''));
         update_option(FAP_PREFIX . 'sale_title_3', sanitize_text_field($_POST['sale_title_3'] ?? ''));

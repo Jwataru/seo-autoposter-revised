@@ -634,14 +634,6 @@ class FAP_Poster {
     private function render_title(string $tpl, array $d): string {
         $title = $this->replace_text($this->expand_sale_title_tags($tpl, $d), $d);
 
-        // 自動付与（従来動作）: 設定ONかつセール中なら「セール中タイトル1」を先頭に付ける。
-        // [sale_title_N] との重複は、テンプレート側で利用者が制御する。
-        if (FAP_License::is('premium')
-            && fap_opt('sale_auto_prefix', '1') === '1'
-            && (string) ($d['sale_price'] ?? '') !== '') {
-            $prefix = trim($this->replace_text((string) fap_opt('sale_title_1', '【セール中】'), $d));
-            if ($prefix !== '') $title = $prefix . $title;
-        }
         // 割引率が取れず空になった場合の「【】」を除去
         $title = preg_replace('/【\s*】/u', '', $title);
         return trim($title);
