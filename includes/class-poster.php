@@ -436,7 +436,8 @@ class FAP_Poster {
         }
         if ($cat_ids) wp_set_post_categories($post_id, $cat_ids);
         if ($tag_ids) {
-            $tag_names = get_terms(['taxonomy' => 'post_tag', 'include' => $tag_ids, 'fields' => 'names']);
+            // hide_empty=false が必須: 新規作成直後のタグは投稿数0で、既定(true)だと取得から除外され紐づかない
+            $tag_names = get_terms(['taxonomy' => 'post_tag', 'include' => $tag_ids, 'fields' => 'names', 'hide_empty' => false]);
             if (!is_wp_error($tag_names)) wp_set_post_tags($post_id, $tag_names);
         }
 
