@@ -456,6 +456,7 @@ class FAP_Poster {
             '_fap_cid'           => $cid,
             '_fap_title'         => $title,
             '_fap_title_tpl'     => $title_tpl, // セール検知時に同じテンプレートで描き直すため
+            '_fap_randoms'       => wp_json_encode($d['randoms'] ?? []), // 同上（[random1]〜[random3]の選択結果）
             '_fap_actress'       => implode(', ', array_column($actress_arr,   'name')),
             '_fap_performer'     => implode(', ', array_column($performer_arr, 'name')),
             '_fap_maker'         => implode(', ', array_column($maker_arr,     'name')),
@@ -630,7 +631,9 @@ class FAP_Poster {
         $map = [];
         foreach ([1, 2, 3, 4, 5] as $n) {
             $default = $n === 1 ? '【セール中】' : '';
-            $map['[sale_title_' . $n . ']'] = $on_sale ? trim((string) fap_opt('sale_title_' . $n, $default)) : '';
+            // 文言の中の変数（[discount-rate] など）は、ここで展開済みの状態にして返す
+            $text = $on_sale ? trim((string) fap_opt('sale_title_' . $n, $default)) : '';
+            $map['[sale_title_' . $n . ']'] = $text !== '' ? $this->replace_text($text, $d) : '';
         }
         return strtr($tpl, $map);
     }
@@ -638,6 +641,8 @@ class FAP_Poster {
     // タイトルテンプレートを描画する（投稿時・プレビュー・セール検知の再描画で共通）
     private function render_title(string $tpl, array $d): string {
         $title = $this->replace_text($this->expand_sale_title_tags($tpl, $d), $d);
+        // [random1]〜[random3] の候補行に書かれた [sale_title_N] は、上の置換で初めて現れるので、もう一度展開する
+        $title = $this->expand_sale_title_tags($title, $d);
 
         // 割引率が取れず空になった場合の「【】」を除去
         $title = preg_replace('/【\s*】/u', '', $title);
@@ -655,6 +660,10 @@ class FAP_Poster {
         $fp = FAP_API::parse_floor_key($floor_key);
         $d  = $this->assemble_data($item, $slot, $service ?: $fp['service'], $fp['floor']);
         if ($d === null) return '';
+
+        // [random1]〜[random3] は投稿時に選ばれた行を使い回す（描き直しのたびにタイトルが変わらないように）
+        $saved_randoms = json_decode((string) get_post_meta($post_id, '_fap_randoms', true), true);
+        if (is_array($saved_randoms) && $saved_randoms) $d['randoms'] = $saved_randoms;
 
         $tpl = (string) get_post_meta($post_id, '_fap_title_tpl', true);
         if ($tpl === '') {
