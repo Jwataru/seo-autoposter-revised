@@ -618,8 +618,8 @@ class FAP_Poster {
     }
 
     // -----------------------------------------------------------------------
-    // タイトル専用タグ [sale_title_1]〜[sale_title_3]（PREMIUM）
-    // セール中だけ、設定「セール中タイトル1〜3」の文言に置換される。セール中でなければ空。
+    // タイトル専用タグ [sale_title_1]〜[sale_title_5]（PREMIUM）
+    // セール中だけ、設定「セール中タイトル1〜5」の文言に置換される。セール中でなければ空。
     // 文言の中では [discount-rate] [sale-price] [price] などの変数が使える。
     // タイトル以外（本文・抜粋など）では展開しない。
     // -----------------------------------------------------------------------
@@ -628,7 +628,7 @@ class FAP_Poster {
 
         $on_sale = FAP_License::is('premium') && (string) ($d['sale_price'] ?? '') !== '';
         $map = [];
-        foreach ([1, 2, 3] as $n) {
+        foreach ([1, 2, 3, 4, 5] as $n) {
             $default = $n === 1 ? '【セール中】' : '';
             $map['[sale_title_' . $n . ']'] = $on_sale ? trim((string) fap_opt('sale_title_' . $n, $default)) : '';
         }
@@ -1775,7 +1775,7 @@ class FAP_Poster {
 
     // セール開始時の処理。
     // タイトルは「投稿時と同じタイトルテンプレート」をセール状態で描き直して決める
-    // （[sale_title_1]〜[sale_title_3] や [fap_if_sale] を使っていればここで反映される）。
+    // （[sale_title_1]〜[sale_title_5] や [fap_if_sale] を使っていればここで反映される）。
     private function apply_sale_badge(int $post_id, string $sale_price, ?object $item = null): void {
         $new_title   = $item ? $this->render_title_for_post($post_id, $item) : '';
         $new_content = null;

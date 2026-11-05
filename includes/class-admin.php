@@ -552,7 +552,7 @@ class FAP_Admin {
             <?php if (FAP_License::is('premium')): ?>
             <div class="fap-card" style="border-left:4px solid #9333ea;">
                 <h2>🔔 セール検知＆自動リライト <span style="background:#9333ea;color:#fff;padding:1px 8px;border-radius:999px;font-size:11px;vertical-align:middle;">PREMIUM</span></h2>
-                <p class="description">過去に投稿した記事の商品のセール状態が変わると、その記事のタイトルを「投稿タイトル／タイトルテンプレート2・3」から描き直します。セール中だけ文言を出したいときは、下の「セール中タイトル1〜3」を作り、タイトルテンプレートの中に <code>[sale_title_1]</code>〜<code>[sale_title_3]</code> として入れてください（例: <code>[sale_title_1][title]</code>）。セール文言は自動では付かないので、タイトルテンプレートに <code>[sale_title_N]</code> を書いた分だけ反映されます（例: <code>[sale_title_1][title][sale_title_2]</code>）。</p>
+                <p class="description">過去に投稿した記事の商品のセール状態が変わると、その記事のタイトルを「投稿タイトル／タイトルテンプレート2・3」から描き直します。セール中だけ文言を出したいときは、下の「セール中タイトル1〜5」を作り、タイトルテンプレートの中に <code>[sale_title_1]</code>〜<code>[sale_title_5]</code> として入れてください（例: <code>[sale_title_1][title]</code>）。セール文言は自動では付かないので、タイトルテンプレートに <code>[sale_title_N]</code> を書いた分だけ反映されます（例: <code>[sale_title_1][title][sale_title_2]</code>）。</p>
                 <table class="form-table">
                     <tr>
                         <th>自動セール検知</th>
@@ -565,15 +565,15 @@ class FAP_Admin {
                         </td>
                     </tr>
                     <tr>
-                        <th>セール中タイトル 1〜3</th>
+                        <th>セール中タイトル 1〜5</th>
                         <td>
-                            <?php foreach ([1 => '【セール中】', 2 => '', 3 => ''] as $n => $def): ?>
+                            <?php foreach ([1 => '【セール中】', 2 => '', 3 => '', 4 => '', 5 => ''] as $n => $def): ?>
                             <p style="margin:0 0 6px;">
                                 <code>[sale_title_<?= $n ?>]</code>
                                 <input type="text" name="sale_title_<?= $n ?>" value="<?php echo esc_attr(fap_opt('sale_title_' . $n, $def)) ?>" placeholder="<?= $n === 1 ? '【セール中】' : '例: 【今だけ[discount-rate]】' ?>" style="width:100%;max-width:480px;">
                             </p>
                             <?php endforeach; ?>
-                            <p class="description">セール中だけ、タイトルテンプレート内の <code>[sale_title_1]</code>〜<code>[sale_title_3]</code> がこの文言に置き換わります（セール中でなければ空になります）。<strong>タイトル専用</strong>のタグで、本文・抜粋では使えません。文言の中では <code>[discount-rate]</code>（30%OFF）・<code>[sale-price]</code>・<code>[price]</code> も使えます。<br>
+                            <p class="description">セール中だけ、タイトルテンプレート内の <code>[sale_title_1]</code>〜<code>[sale_title_5]</code> がこの文言に置き換わります（セール中でなければ空になります）。<strong>タイトル専用</strong>のタグで、本文・抜粋では使えません。文言の中では <code>[discount-rate]</code>（30%OFF）・<code>[sale-price]</code>・<code>[price]</code> も使えます。<br>
                             例: 「投稿タイトル」を <code>[sale_title_1][title]</code>、「タイトルテンプレート 2」を <code>[sale_title_2][title]</code> のようにすると、実際のタイトルはタイトルテンプレートだけで決まります。<br>
                             ※AIリライト（セール時自動リライト）をONにしている場合は、AIが生成したタイトルが優先されます。</p>
                         </td>
@@ -1719,7 +1719,7 @@ class FAP_Admin {
                     <?php foreach ([
                         ['[sale-price]',    'セール価格（セール中のみ・通常時は空）。タイトル・抜粋では描画時点の値（タイトルはセール検知で再描画）、本文では表示時点の最新セール状態を自動反映'],
                         ['[discount-rate]', '割引率ラベル（例: 30%OFF）。セール中のみ・通常時は空'],
-                        ['[sale_title_1] 〜 [sale_title_3]', 'タイトルテンプレート専用。セール中だけ「セール中タイトル1〜3」の文言に置換（通常時は空）。Premium'],
+                        ['[sale_title_1] 〜 [sale_title_5]', 'タイトルテンプレート専用。セール中だけ「セール中タイトル1〜5」の文言に置換（通常時は空）。Premium'],
                         ['[fap_if_sale] 〜 [/fap_if_sale]',         '囲んだ部分をセール中のみ表示（本文：表示時点の状態で自動切替。タイトル・抜粋：描画時点の状態で確定、タイトルはセール検知で再描画）'],
                         ['[fap_if_not_sale] 〜 [/fap_if_not_sale]', '囲んだ部分をセール中でない時のみ表示（本文・タイトル・抜粋）'],
                         ['[sale-history]',  'セール履歴サマリー（過去のセール回数・平均割引率・前回セール月）。履歴が無い作品では非表示。本文のみ有効'],
@@ -1950,6 +1950,8 @@ class FAP_Admin {
         update_option(FAP_PREFIX . 'sale_title_1', sanitize_text_field($_POST['sale_title_1'] ?? '【セール中】'));
         update_option(FAP_PREFIX . 'sale_title_2', sanitize_text_field($_POST['sale_title_2'] ?? ''));
         update_option(FAP_PREFIX . 'sale_title_3', sanitize_text_field($_POST['sale_title_3'] ?? ''));
+        update_option(FAP_PREFIX . 'sale_title_4', sanitize_text_field($_POST['sale_title_4'] ?? ''));
+        update_option(FAP_PREFIX . 'sale_title_5', sanitize_text_field($_POST['sale_title_5'] ?? ''));
         update_option(FAP_PREFIX . 'sale_category_on',   isset($_POST['sale_category_on']) ? '1' : '0');
         update_option(FAP_PREFIX . 'sale_category_name', sanitize_text_field($_POST['sale_category_name'] ?? 'セール中'));
         update_option(FAP_PREFIX . 'nonsale_category_on',   isset($_POST['nonsale_category_on']) ? '1' : '0');
