@@ -2706,7 +2706,8 @@ class FAP_Admin {
                     <?php endif; ?>
                 </p>
                 <p class="description">
-                    投稿タイトルを <code>FAP ランキングテンプレート</code>、ステータスを「下書き」にした投稿の本文がテンプレートとして使われます。<br>
+                    投稿タイトルを <code>FAP ランキングテンプレート<?= $rk > 1 ? (int) $rk : '' ?></code>、ステータスを「下書き」にした投稿の本文がテンプレートとして使われます。<?php if ($rk > 1): ?>（無ければ共通の <code>FAP ランキングテンプレート</code> を使用）<?php endif; ?><br>
+                    冒頭・締めの文章は、<code>FAP ランキング冒頭テンプレート<?= $rk > 1 ? (int) $rk : '' ?></code> / <code>FAP ランキング締めテンプレート<?= $rk > 1 ? (int) $rk : '' ?></code> という下書きで設定できます<?php if ($rk > 1): ?>（無ければ番号なしの共通版を使用）<?php endif; ?>。<br>
                     テンプレートなしの場合は固定レイアウトで生成されます。<br>
                     使える変数: <code>[rank]</code> <code>[medal]</code> <code>[rank-label]</code> <code>[rank-change]</code> <code>[title]</code> <code>[aff-url]</code>
                     <code>[package]</code> <code>[actress]</code> <code>[maker]</code> <code>[genre]</code>
