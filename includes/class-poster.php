@@ -8,6 +8,11 @@ class FAP_Poster {
 
     private FAP_API $api;
 
+    // 作品説明文のAIリライト用（assemble_data 内で参照）
+    private bool    $ai_desc_enabled  = false; // 新規投稿の組み立て中だけ true
+    private ?string $ai_desc_override = null;  // 再描画時：投稿時に保存したAI文（空文字=AIなし→原文を使う）
+    private string  $ai_desc_result   = '';    // 今回AIが生成した説明文（投稿メタに保存する）
+
     public function __construct(FAP_API $api) {
         $this->api = $api;
     }
@@ -257,8 +262,15 @@ class FAP_Poster {
             }
 
             // 3) それでも空なら、API取得済み情報から代替紹介文を生成
+            $is_fallback_comment = false;
             if ($wants_comment && !$comment_text) {
-                $comment_text = $this->build_fallback_comment($title, $actress_arr, $genre_arr, $maker_arr, $series_arr);
+                $comment_text        = $this->build_fallback_comment($title, $actress_arr, $genre_arr, $maker_arr, $series_arr);
+                $is_fallback_comment = true;
+            }
+
+            // 4) 作品説明文だけをAIでリライト（設定ON時・新規投稿時のみ。代替文は対象外）
+            if ($comment_text && $wants_comment) {
+                $comment_text = $this->maybe_rewrite_description($title, $comment_text, $is_fallback_comment);
             }
 
             if ($comment_text) {
@@ -280,6 +292,25 @@ class FAP_Poster {
             'review_html', 'review_html2', 'review_avg', 'review_cnt',
             'comment', 'comment_short', 'randoms', 'service'
         );
+    }
+
+    // 作品説明文のAIリライト。
+    //  ・新規投稿の組み立て中（$ai_desc_enabled）だけAIを呼ぶ。プレビュー・ランキングでは呼ばない
+    //  ・セール検知の再描画では、投稿時に保存したAI文を使い回す（AIを再実行しない）
+    //  ・失敗したら原文のまま（投稿は止めない）
+    private function maybe_rewrite_description(string $title, string $text, bool $is_fallback): string {
+        if ($this->ai_desc_override !== null) {
+            return $this->ai_desc_override !== '' ? $this->ai_desc_override : $text;
+        }
+        if (!$this->ai_desc_enabled || $is_fallback) return $text;
+
+        $r = FAP_AI::rewrite_description($title, $text);
+        if (!$r['ok']) {
+            fap_log('[AI][Desc] 説明文リライト失敗（原文を使用）: ' . $r['msg']);
+            return $text;
+        }
+        $this->ai_desc_result = $r['text'];
+        return $r['text'];
     }
 
     // -----------------------------------------------------------------------
@@ -391,7 +422,14 @@ class FAP_Poster {
         }
 
         // 投稿に必要なデータを組み立て（プレビュー機能と共用）
-        $d = $this->assemble_data($item, $slot, $service, $floor);
+        $this->ai_desc_enabled  = fap_opt('ai_desc_on', '0') === '1';
+        $this->ai_desc_override = null;
+        $this->ai_desc_result   = '';
+        try {
+            $d = $this->assemble_data($item, $slot, $service, $floor);
+        } finally {
+            $this->ai_desc_enabled = false; // 以降の再描画・プレビューでAIを呼ばない
+        }
         if ($d === null) return false;
         $cid           = $d['cid'];
         $title         = $d['title'];
@@ -505,6 +543,7 @@ class FAP_Poster {
             '_fap_title'         => $title,
             '_fap_title_tpl'     => $title_tpl, // セール検知時に同じテンプレートで描き直すため
             '_fap_randoms'       => wp_json_encode($d['randoms'] ?? []), // 同上（[random1]〜[random3]の選択結果）
+            '_fap_ai_desc'       => $this->ai_desc_result, // AIでリライトした作品説明文（再描画で使い回す。空=AI未使用）
             '_fap_actress'       => implode(', ', array_column($actress_arr,   'name')),
             '_fap_performer'     => implode(', ', array_column($performer_arr, 'name')),
             '_fap_maker'         => implode(', ', array_column($maker_arr,     'name')),
@@ -706,7 +745,12 @@ class FAP_Poster {
         if ($slot < 1) return '';
 
         $fp = FAP_API::parse_floor_key($floor_key);
-        $d  = $this->assemble_data($item, $slot, $service ?: $fp['service'], $fp['floor']);
+        $this->ai_desc_override = (string) get_post_meta($post_id, '_fap_ai_desc', true); // AIは再実行しない
+        try {
+            $d  = $this->assemble_data($item, $slot, $service ?: $fp['service'], $fp['floor']);
+        } finally {
+            $this->ai_desc_override = null;
+        }
         if ($d === null) return '';
 
         // [random1]〜[random3] は投稿時に選ばれた行を使い回す（描き直しのたびにタイトルが変わらないように）
@@ -1965,7 +2009,12 @@ class FAP_Poster {
         }
 
         $fp = FAP_API::parse_floor_key($floor_key);
-        $d  = $this->assemble_data($item, $slot, $service ?: $fp['service'], $fp['floor']);
+        $this->ai_desc_override = (string) get_post_meta($post_id, '_fap_ai_desc', true); // AIは再実行しない
+        try {
+            $d  = $this->assemble_data($item, $slot, $service ?: $fp['service'], $fp['floor']);
+        } finally {
+            $this->ai_desc_override = null;
+        }
         if ($d === null) {
             fap_log('[SaleCheck] 本文再生成失敗（データ組み立て不可） post_id=' . $post_id);
             return false;

@@ -3338,6 +3338,8 @@ class FAP_Admin {
         $prompt_tpl = fap_opt('ai_prompt_tpl',    "以下の記事タイトルと本文を、読者に魅力が伝わるよう自然な日本語でリライトしてください。\n\nタイトル: [title]\n\n本文:\n[content]");
         $auto_sale  = fap_opt('ai_auto_sale',     '0') === '1';
         $auto_new   = fap_opt('ai_auto_new',      '0') === '1';
+        $desc_on     = fap_opt('ai_desc_on',      '0') === '1';
+        $desc_prompt = fap_opt('ai_desc_prompt',  FAP_AI::DESC_PROMPT) ?: FAP_AI::DESC_PROMPT;
 
         $default_models = ['openai' => 'gpt-4o-mini', 'claude' => 'claude-haiku-4-5-20251001'];
 
@@ -3395,6 +3397,32 @@ class FAP_Admin {
                         <td>
                             <textarea id="ai_prompt_tpl" name="ai_prompt_tpl" rows="8" class="large-text"><?= esc_textarea($prompt_tpl) ?></textarea>
                             <p class="description">使用できる変数: <code>[title]</code>（記事タイトル）、<code>[content]</code>（本文）</p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="fap-card">
+                <h2>作品説明文のリライト（おすすめ）</h2>
+                <table class="form-table">
+                    <tr>
+                        <th>新規投稿時に説明文をAIでリライト</th>
+                        <td>
+                            <label><input type="checkbox" name="ai_desc_on" value="1" <?php checked($desc_on) ?>>
+                            新規投稿時に、作品説明文（<code>[comment]</code> / <code>[comment-short]</code>）だけをAIで書き直す</label>
+                            <p class="description">
+                                本文のHTMLやショートコード（<code>[fap_if_sale]</code> など）には一切触れず、説明文の文章だけを置き換えます。FANZAの説明文との重複対策に使えます。<br>
+                                リライトに失敗した場合は、原文の説明文のまま投稿を続けます。セール検知での本文再生成でも、保存したリライト文を使い回します（AIは再実行しません）。<br>
+                                1記事につきAIを1回呼びます（短い文章なので軽いモデルで十分です）。ランキング記事は対象外です。<br>
+                                <strong>下の「新規投稿時に自動リライト」（全文リライト）とは併用しないでください。</strong>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="ai_desc_prompt">説明文用プロンプト</label></th>
+                        <td>
+                            <textarea id="ai_desc_prompt" name="ai_desc_prompt" rows="14" class="large-text"><?= esc_textarea($desc_prompt) ?></textarea>
+                            <p class="description">使用できる変数: <code>[title]</code>（作品名）、<code>[description]</code>（元の説明文）。AIの返答は、そのまま説明文として使われます。</p>
                         </td>
                     </tr>
                 </table>
@@ -3669,6 +3697,8 @@ class FAP_Admin {
         update_option('fap_ai_prompt_tpl',  sanitize_textarea_field($_POST['ai_prompt_tpl'] ?? ''));
         update_option('fap_ai_auto_sale',   isset($_POST['ai_auto_sale']) ? '1' : '0');
         update_option('fap_ai_auto_new',    isset($_POST['ai_auto_new'])  ? '1' : '0');
+        update_option('fap_ai_desc_on',     isset($_POST['ai_desc_on'])   ? '1' : '0');
+        update_option('fap_ai_desc_prompt', sanitize_textarea_field($_POST['ai_desc_prompt'] ?? ''));
 
         set_transient('fap_notice_success', 'AI設定を保存しました。', 30);
         wp_safe_redirect(admin_url('admin.php?page=' . FAP_SLUG . '-ai'));

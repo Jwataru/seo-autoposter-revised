@@ -6,6 +6,27 @@ defined('ABSPATH') || exit;
  */
 class FAP_AI {
 
+    // 作品説明文（[comment]）専用リライトの既定プロンプト。[title] と [description] を置き換える。
+    public const DESC_PROMPT = <<<'TXT'
+あなたはアフィリエイトサイトの編集者です。以下の作品の紹介文（メーカー提供の説明文）を読み、読者向けの紹介文として、まったく新しい文章で書き直してください。
+
+【ルール】
+1. 元の文章の言い回し・語順・文の並びを使い回さず、内容を理解したうえで、自分の言葉で組み立て直す（単語の置き換えだけにしない）。
+2. 元の文章にある事実（設定・登場人物・ジャンル・見どころ）だけを使い、ない情報は書き足さない。作品名・キャラクター名・サークル名・数値は、そのまま使う。
+3. 文字数は元の60〜100%、2〜4文程度にまとめる。
+4. 「です・ます」調で書く。誇大表現（「絶対」「必ず」「日本一」など）は使わない。価格・セール・割引の話は書かない。
+5. 結末のネタバレは書かない。
+6. 露骨な性的表現は避け、ジャンルや雰囲気が伝わる穏やかな表現にする。
+7. 出力は紹介文の本文だけにする。前置き、見出し、補足説明、HTMLタグ、全体を囲む引用符は付けない。
+
+作品名: [title]
+
+元の紹介文:
+[description]
+TXT;
+
+    private const DESC_SYSTEM_PROMPT = 'あなたはアフィリエイトサイトの編集者です。指示に従い、紹介文の本文だけを出力してください。前置きや説明は一切不要です。';
+
     private const SYSTEM_PROMPT = "あなたはアフィリエイトブログのライターです。指定された記事タイトルと本文を読者に魅力が伝わるようリライトしてください。\n必ず以下の形式のみで返してください（余分なテキスト不要）：\nTITLE: リライト後のタイトル\n\nCONTENT:\nリライト後の本文";
 
     /**
@@ -33,6 +54,45 @@ class FAP_AI {
     }
 
     /**
+     * 作品説明文だけをAIでリライトする（本文のHTML・ショートコードには触れない）
+     *
+     * @return array{ok:bool, text:string, msg:string}
+     */
+    public static function rewrite_description(string $title, string $description): array {
+        $provider = fap_opt('ai_provider', 'openai');
+        $api_key  = fap_secret('FAP_AI_API_KEY', 'ai_api_key');
+        $model    = fap_opt('ai_model', '');
+        $tpl      = fap_opt('ai_desc_prompt', self::DESC_PROMPT) ?: self::DESC_PROMPT;
+
+        if (!$api_key) {
+            return ['ok' => false, 'text' => '', 'msg' => 'AIのAPIキーが未設定です。'];
+        }
+
+        $prompt = str_replace(['[title]', '[description]'], [$title, $description], $tpl);
+
+        // 説明文は短いので出力上限は小さめ。上限で途切れた場合はエラー扱い（途中で切れた文を使わない）
+        if ($provider === 'claude') {
+            $r = self::call_claude($api_key, $model ?: 'claude-haiku-4-5-20251001', $prompt, self::DESC_SYSTEM_PROMPT, 800, true);
+        } else {
+            $r = self::call_openai($api_key, $model ?: 'gpt-4o-mini', $prompt, self::DESC_SYSTEM_PROMPT, 800, true);
+        }
+        if (!$r['ok']) {
+            return ['ok' => false, 'text' => '', 'msg' => $r['msg']];
+        }
+
+        // 念のため、全体を囲む引用符・コードブロック記号・タグを除去
+        $text = trim($r['content']);
+        $text = preg_replace('/^```[a-z]*\s*|\s*```$/u', '', $text);
+        $text = trim(wp_strip_all_tags($text));
+        // 全体を囲む括弧・引用符だけを除去（trim() の文字リストはバイト単位で日本語を壊すため preg を使う）
+        $text = trim(preg_replace('/^[「"\']+|[」"\']+$/u', '', $text));
+        if ($text === '') {
+            return ['ok' => false, 'text' => '', 'msg' => 'AIの応答が空でした。'];
+        }
+        return ['ok' => true, 'text' => $text, 'msg' => ''];
+    }
+
+    /**
      * ダミーテキストでAPI接続を確認する
      *
      * @return array{ok:bool, msg:string}
@@ -47,7 +107,7 @@ class FAP_AI {
 
     // -----------------------------------------------------------------------
 
-    private static function call_openai(string $api_key, string $model, string $user_prompt): array {
+    private static function call_openai(string $api_key, string $model, string $user_prompt, ?string $system = null, int $max_tokens = 2000, bool $raw = false): array {
         $response = wp_remote_post('https://api.openai.com/v1/chat/completions', [
             'timeout' => 60,
             'headers' => [
@@ -56,9 +116,9 @@ class FAP_AI {
             ],
             'body' => wp_json_encode([
                 'model'      => $model,
-                'max_tokens' => 2000,
+                'max_tokens' => $max_tokens,
                 'messages'   => [
-                    ['role' => 'system', 'content' => self::SYSTEM_PROMPT],
+                    ['role' => 'system', 'content' => $system ?? self::SYSTEM_PROMPT],
                     ['role' => 'user',   'content' => $user_prompt],
                 ],
             ]),
@@ -82,10 +142,16 @@ class FAP_AI {
             return self::err('OpenAI エラー: ' . $err_msg);
         }
 
+        if ($raw) {
+            if (($body['choices'][0]['finish_reason'] ?? '') === 'length') {
+                return self::err('AIの応答が出力上限で途切れました。');
+            }
+            return ['ok' => true, 'title' => '', 'content' => (string) $body['choices'][0]['message']['content'], 'msg' => ''];
+        }
         return self::parse_response($body['choices'][0]['message']['content']);
     }
 
-    private static function call_claude(string $api_key, string $model, string $user_prompt): array {
+    private static function call_claude(string $api_key, string $model, string $user_prompt, ?string $system = null, int $max_tokens = 2000, bool $raw = false): array {
         $response = wp_remote_post('https://api.anthropic.com/v1/messages', [
             'timeout' => 60,
             'headers' => [
@@ -95,8 +161,8 @@ class FAP_AI {
             ],
             'body' => wp_json_encode([
                 'model'      => $model,
-                'max_tokens' => 2000,
-                'system'     => self::SYSTEM_PROMPT,
+                'max_tokens' => $max_tokens,
+                'system'     => $system ?? self::SYSTEM_PROMPT,
                 'messages'   => [
                     ['role' => 'user', 'content' => $user_prompt],
                 ],
@@ -121,6 +187,12 @@ class FAP_AI {
             return self::err('Claude エラー: ' . $err_msg);
         }
 
+        if ($raw) {
+            if (($body['stop_reason'] ?? '') === 'max_tokens') {
+                return self::err('AIの応答が出力上限で途切れました。');
+            }
+            return ['ok' => true, 'title' => '', 'content' => (string) $body['content'][0]['text'], 'msg' => ''];
+        }
         return self::parse_response($body['content'][0]['text']);
     }
 
