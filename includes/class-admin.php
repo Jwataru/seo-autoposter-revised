@@ -3390,19 +3390,6 @@ class FAP_Admin {
             </div>
 
             <div class="fap-card">
-                <h2>リライトプロンプト</h2>
-                <table class="form-table">
-                    <tr>
-                        <th><label for="ai_prompt_tpl">プロンプトテンプレート</label></th>
-                        <td>
-                            <textarea id="ai_prompt_tpl" name="ai_prompt_tpl" rows="8" class="large-text"><?= esc_textarea($prompt_tpl) ?></textarea>
-                            <p class="description">使用できる変数: <code>[title]</code>（記事タイトル）、<code>[content]</code>（本文）</p>
-                        </td>
-                    </tr>
-                </table>
-            </div>
-
-            <div class="fap-card">
                 <h2>作品説明文のリライト（おすすめ）</h2>
                 <table class="form-table">
                     <tr>
@@ -3429,8 +3416,16 @@ class FAP_Admin {
             </div>
 
             <div class="fap-card">
-                <h2>自動リライト設定</h2>
+                <h2>全文リライト（タイトル・本文）</h2>
                 <table class="form-table">
+                    <tr>
+                        <th><label for="ai_prompt_tpl">プロンプトテンプレート</label></th>
+                        <td>
+                            <textarea id="ai_prompt_tpl" name="ai_prompt_tpl" rows="8" class="large-text"><?= esc_textarea($prompt_tpl) ?></textarea>
+                            <p class="description">使用できる変数: <code>[title]</code>（記事タイトル）、<code>[content]</code>（本文）<br>
+                            このプロンプトは、下の「新規投稿時に自動リライト」「セール検知時に自動リライト」と、ページ下部の手動リライトで共通に使われます。作品説明文のリライト（上のカード）には使われません。</p>
+                        </td>
+                    </tr>
                     <tr>
                         <th>新規投稿時に自動リライト</th>
                         <td>
