@@ -35,6 +35,7 @@ require_once FAP_DIR . 'includes/class-poster.php';
 require_once FAP_DIR . 'includes/class-seo.php';
 require_once FAP_DIR . 'includes/class-frontend.php';
 require_once FAP_DIR . 'includes/class-scheduler.php';
+require_once FAP_DIR . 'includes/class-diff.php';
 require_once FAP_DIR . 'includes/class-admin.php';
 require_once FAP_DIR . 'includes/class-updater.php';
 
@@ -196,6 +197,7 @@ function fap_bootstrap() {
         // グローバル変数に保持してGCされないようにする
         global $fap_admin_instance;
         $fap_admin_instance = new FAP_Admin();
+        new FAP_Diff(); // AIリライトの差分表示（記事編集画面・投稿一覧）
     }
 }
 add_action('plugins_loaded', 'fap_bootstrap', 10);

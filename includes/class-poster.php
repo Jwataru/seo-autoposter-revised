@@ -12,6 +12,7 @@ class FAP_Poster {
     private bool    $ai_desc_enabled  = false; // 新規投稿の組み立て中だけ true
     private ?string $ai_desc_override = null;  // 再描画時：投稿時に保存したAI文（空文字=AIなし→原文を使う）
     private string  $ai_desc_result   = '';    // 今回AIが生成した説明文（投稿メタに保存する）
+    private string  $ai_desc_src      = '';    // AIに渡した元の説明文（差分表示用に投稿メタへ保存する）
 
     public function __construct(FAP_API $api) {
         $this->api = $api;
@@ -310,6 +311,7 @@ class FAP_Poster {
             return $text;
         }
         $this->ai_desc_result = $r['text'];
+        $this->ai_desc_src    = $text;
         return $r['text'];
     }
 
@@ -425,6 +427,7 @@ class FAP_Poster {
         $this->ai_desc_enabled  = fap_opt('ai_desc_on', '0') === '1';
         $this->ai_desc_override = null;
         $this->ai_desc_result   = '';
+        $this->ai_desc_src      = '';
         try {
             $d = $this->assemble_data($item, $slot, $service, $floor);
         } finally {
@@ -544,6 +547,7 @@ class FAP_Poster {
             '_fap_title_tpl'     => $title_tpl, // セール検知時に同じテンプレートで描き直すため
             '_fap_randoms'       => wp_json_encode($d['randoms'] ?? []), // 同上（[random1]〜[random3]の選択結果）
             '_fap_ai_desc'       => $this->ai_desc_result, // AIでリライトした作品説明文（再描画で使い回す。空=AI未使用）
+            '_fap_ai_desc_src'   => $this->ai_desc_src,    // リライト前の作品説明文（差分表示用）
             '_fap_actress'       => implode(', ', array_column($actress_arr,   'name')),
             '_fap_performer'     => implode(', ', array_column($performer_arr, 'name')),
             '_fap_maker'         => implode(', ', array_column($maker_arr,     'name')),
