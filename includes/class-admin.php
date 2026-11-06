@@ -580,6 +580,22 @@ class FAP_Admin {
                         </td>
                     </tr>
                     <tr>
+                        <th>トップのセール中バッジ</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="sale_badge_on" value="1" <?php checked(fap_opt('sale_badge_on', '0'), '1') ?>>
+                                トップページの記事カードのアイキャッチ上部に、セール中バッジを表示する
+                            </label>
+                            <p style="margin:8px 0 4px;">
+                                表示文言:
+                                <input type="text" name="sale_badge_text" value="<?php echo esc_attr(fap_opt('sale_badge_text', 'ただいまセール中')) ?>" placeholder="ただいまセール中" style="width:200px;">
+                                &nbsp;背景色: <input type="color" name="sale_badge_bg" value="<?php echo esc_attr(fap_opt('sale_badge_bg', '#e53935')) ?>">
+                                &nbsp;文字色: <input type="color" name="sale_badge_color" value="<?php echo esc_attr(fap_opt('sale_badge_color', '#ffffff')) ?>">
+                            </p>
+                            <p class="description">「セール中カテゴリ」がONなら、そのカテゴリが付いた記事だけに表示します（OFFの場合は、セール価格が入っている記事）。トップページのみで、記事ページには出ません。テーマ Cocoon のカード一覧を想定しています。表示が出ない場合は、サイトのキャッシュを削除してください。</p>
+                        </td>
+                    </tr>
+                    <tr>
                         <th>本文の再生成</th>
                         <td>
                             <label>
@@ -1960,6 +1976,10 @@ class FAP_Admin {
         update_option(FAP_PREFIX . 'e_date', sanitize_text_field($_POST['e_date'] ?? ''));
         update_option(FAP_PREFIX . 'sale_check_on',  isset($_POST['sale_check_on'])  ? '1' : '0');
         update_option(FAP_PREFIX . 'sale_rerender',  isset($_POST['sale_rerender'])  ? '1' : '0');
+        update_option(FAP_PREFIX . 'sale_badge_on',    isset($_POST['sale_badge_on']) ? '1' : '0');
+        update_option(FAP_PREFIX . 'sale_badge_text',  sanitize_text_field($_POST['sale_badge_text'] ?? 'ただいまセール中'));
+        update_option(FAP_PREFIX . 'sale_badge_bg',    sanitize_hex_color($_POST['sale_badge_bg'] ?? '') ?: '#e53935');
+        update_option(FAP_PREFIX . 'sale_badge_color', sanitize_hex_color($_POST['sale_badge_color'] ?? '') ?: '#ffffff');
         update_option(FAP_PREFIX . 'sale_title_1', sanitize_text_field($_POST['sale_title_1'] ?? '【セール中】'));
         update_option(FAP_PREFIX . 'sale_title_2', sanitize_text_field($_POST['sale_title_2'] ?? ''));
         update_option(FAP_PREFIX . 'sale_title_3', sanitize_text_field($_POST['sale_title_3'] ?? ''));

@@ -13,6 +13,8 @@ class FAP_Frontend {
         add_action('wp_enqueue_scripts',       [$this, 'enqueue']);
         add_filter('the_content',              [$this, 'filter_content'], 20);
         add_action('wp_footer',                [$this, 'render_sticky_cta']);
+        add_filter('post_class',               [$this, 'add_sale_post_class'], 10, 3);
+        add_action('wp_head',                  [$this, 'print_sale_badge_css'], 20);
         add_action('wp_ajax_fap_track_click',  [$this, 'ajax_track_click']);
         add_action('wp_ajax_nopriv_fap_track_click', [$this, 'ajax_track_click']);
         add_action('wp_ajax_fap_track_view',   [$this, 'ajax_track_view']);
@@ -24,6 +26,47 @@ class FAP_Frontend {
         add_shortcode('fap_if_review',     [$this, 'sc_if_review']);
         add_shortcode('fap_if_no_review',  [$this, 'sc_if_no_review']);
         add_shortcode('fap_sale_history',  [$this, 'sc_sale_history']);
+    }
+
+    // -----------------------------------------------------------------------
+    // トップページの記事カード（アイキャッチ上部）に「ただいまセール中」バッジを表示
+    // ・セール中の記事に post_class で fap-on-sale を付ける
+    //   （「セール中カテゴリ」がONならそのカテゴリ、OFFなら _fap_sale_price メタで判定）
+    // ・バッジ自体は CSS（::before）で描画する。表示は body.home（トップ）限定
+    // -----------------------------------------------------------------------
+    public function add_sale_post_class(array $classes, $class = '', $post_id = 0): array {
+        if (fap_opt('sale_badge_on', '0') !== '1' || !$post_id) return $classes;
+
+        if (fap_opt('sale_category_on', '0') === '1') {
+            $name = trim((string) fap_opt('sale_category_name', 'セール中')) ?: 'セール中';
+            $term = get_term_by('name', $name, 'category');
+            $on   = $term && has_category((int) $term->term_id, $post_id);
+        } else {
+            $on = (string) get_post_meta($post_id, '_fap_sale_price', true) !== '';
+        }
+        if ($on) $classes[] = 'fap-on-sale';
+        return $classes;
+    }
+
+    public function print_sale_badge_css(): void {
+        if (fap_opt('sale_badge_on', '0') !== '1' || !is_home() && !is_front_page()) return;
+
+        $text = trim((string) fap_opt('sale_badge_text', 'ただいまセール中')) ?: 'ただいまセール中';
+        $text = addcslashes(str_replace(["\r", "\n"], '', $text), "\"\\");
+        $bg   = sanitize_hex_color((string) fap_opt('sale_badge_bg', '#e53935')) ?: '#e53935';
+        $fg   = sanitize_hex_color((string) fap_opt('sale_badge_color', '#ffffff')) ?: '#ffffff';
+
+        echo "<style id=\"fap-sale-badge-css\">\n"
+           . "body.home .fap-on-sale .entry-card-thumb,body.home .fap-on-sale .card-thumb,body.home .fap-on-sale .post-thumbnail{position:relative;}\n"
+           . "body.home .fap-on-sale .entry-card-thumb::before,body.home .fap-on-sale .card-thumb::before,body.home .fap-on-sale .post-thumbnail::before{"
+           . "content:\"{$text}\";position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;"
+           . "padding:5px 14px;border:2px solid #fff;border-radius:999px;background:{$bg};color:{$fg};"
+           . "font-size:13px;font-weight:800;line-height:1.4;white-space:nowrap;letter-spacing:.05em;"
+           . "box-shadow:0 3px 8px rgba(0,0,0,.35);pointer-events:none;animation:fap-sale-pop 1.6s ease-in-out infinite;}\n"
+           . "@keyframes fap-sale-pop{0%,100%{transform:translateX(-50%) scale(1);}50%{transform:translateX(-50%) scale(1.08);}}\n"
+           . "@media (max-width:480px){body.home .fap-on-sale .entry-card-thumb::before,body.home .fap-on-sale .card-thumb::before,body.home .fap-on-sale .post-thumbnail::before{font-size:11px;padding:3px 10px;top:6px;}}\n"
+           . "@media (prefers-reduced-motion:reduce){body.home .fap-on-sale .entry-card-thumb::before,body.home .fap-on-sale .card-thumb::before,body.home .fap-on-sale .post-thumbnail::before{animation:none;}}\n"
+           . "</style>\n";
     }
 
     // -----------------------------------------------------------------------
