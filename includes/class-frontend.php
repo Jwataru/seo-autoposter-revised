@@ -59,12 +59,12 @@ class FAP_Frontend {
         echo "<style id=\"fap-sale-badge-css\">\n"
            . "body.home .fap-on-sale .entry-card-thumb,body.home .fap-on-sale .card-thumb,body.home .fap-on-sale .post-thumbnail{position:relative;}\n"
            . "body.home .fap-on-sale .entry-card-thumb::before,body.home .fap-on-sale .card-thumb::before,body.home .fap-on-sale .post-thumbnail::before{"
-           . "content:\"{$text}\";position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;"
+           . "content:\"{$text}\";position:absolute;bottom:8px;left:8px;transform-origin:left bottom;z-index:5;"
            . "padding:5px 14px;border:2px solid #fff;border-radius:999px;background:{$bg};color:{$fg};"
            . "font-size:13px;font-weight:800;line-height:1.4;white-space:nowrap;letter-spacing:.05em;"
            . "box-shadow:0 3px 8px rgba(0,0,0,.35);pointer-events:none;animation:fap-sale-pop 1.6s ease-in-out infinite;}\n"
-           . "@keyframes fap-sale-pop{0%,100%{transform:translateX(-50%) scale(1);}50%{transform:translateX(-50%) scale(1.08);}}\n"
-           . "@media (max-width:480px){body.home .fap-on-sale .entry-card-thumb::before,body.home .fap-on-sale .card-thumb::before,body.home .fap-on-sale .post-thumbnail::before{font-size:11px;padding:3px 10px;top:6px;}}\n"
+           . "@keyframes fap-sale-pop{0%,100%{transform:scale(1);}50%{transform:scale(1.08);}}\n"
+           . "@media (max-width:480px){body.home .fap-on-sale .entry-card-thumb::before,body.home .fap-on-sale .card-thumb::before,body.home .fap-on-sale .post-thumbnail::before{font-size:11px;padding:3px 10px;bottom:6px;left:6px;}}\n"
            . "@media (prefers-reduced-motion:reduce){body.home .fap-on-sale .entry-card-thumb::before,body.home .fap-on-sale .card-thumb::before,body.home .fap-on-sale .post-thumbnail::before{animation:none;}}\n"
            . "</style>\n";
     }

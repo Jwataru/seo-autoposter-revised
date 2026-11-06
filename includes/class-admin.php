@@ -584,7 +584,7 @@ class FAP_Admin {
                         <td>
                             <label>
                                 <input type="checkbox" name="sale_badge_on" value="1" <?php checked(fap_opt('sale_badge_on', '0'), '1') ?>>
-                                トップページの記事カードのアイキャッチ上部に、セール中バッジを表示する
+                                トップページの記事カードのアイキャッチ左下に、セール中バッジを表示する
                             </label>
                             <p style="margin:8px 0 4px;">
                                 表示文言:
