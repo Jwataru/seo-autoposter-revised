@@ -80,6 +80,54 @@ class FAP_Poster {
         return $this->result($posted, $skipped, '');
     }
 
+    // -----------------------------------------------------------------------
+    // 商品ID（content_id）を指定して投稿する。
+    // スロットのフロア・テンプレート・タグ・カテゴリ等の設定で、IDごとに1件ずつ投稿する。
+    // 返り値: ['posted' => 投稿件数, 'errors' => エラーメッセージの配列]
+    // -----------------------------------------------------------------------
+    public function run_cids(int $slot, array $cids): array {
+        if ($slot > FAP_License::max_slots()) {
+            return ['posted' => 0, 'errors' => ["スロット {$slot} はご利用のプランでは使用できません。"]];
+        }
+
+        $api_id = fap_secret('FAP_FANZA_API_ID', 'api_id');
+        $aff_id = fap_secret('FAP_FANZA_AFF_ID', 'aff_id');
+        if (!$api_id || !$aff_id) {
+            return ['posted' => 0, 'errors' => ['APIキーが設定されていません。']];
+        }
+
+        $floor_key = fap_slot_opt($slot, 'floor', '');
+        $fp        = FAP_API::parse_floor_key($floor_key);
+        if (!$floor_key || !$fp['site'] || !$fp['service'] || !$fp['floor']) {
+            return ['posted' => 0, 'errors' => ['スロットのフロアが設定されていません。']];
+        }
+
+        $posted = 0;
+        $errors = [];
+        foreach ($cids as $cid) {
+            $item = $this->api->fetch_item_by_cid($cid, $api_id, $aff_id, $fp['site'], $fp['service'], $fp['floor']);
+            if (!$item) {
+                $errors[] = "{$cid}: 該当する商品が見つかりません（IDの誤り、このスロットのフロアと違う、またはAPI取得失敗）";
+                continue;
+            }
+
+            $real_cid = (string) ($item->content_id ?? $cid);
+            if (fap_opt('feat_dedup', '1') === '1' && $this->cid_exists($real_cid)) {
+                $errors[] = "{$cid}: すでに投稿済みです";
+                continue;
+            }
+
+            if ($this->post_item($item, $slot, $fp['service'], $fp['floor'])) {
+                $posted++;
+            } else {
+                $errors[] = "{$cid}: 投稿されませんでした（ブラックリスト・除外条件に該当、または必要なデータが取得できませんでした）";
+            }
+        }
+
+        fap_log("[CidPost][Slot {$slot}] posted:{$posted} errors:" . count($errors));
+        return ['posted' => $posted, 'errors' => $errors];
+    }
+
     private function apply_auto_date_filter(array &$params): void {
         $today    = fap_opt('date_today', '0') === '1';
         $threeday = fap_opt('date_3day',  '0') === '1';

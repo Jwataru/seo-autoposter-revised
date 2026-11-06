@@ -21,6 +21,7 @@ class FAP_Admin {
         add_action('admin_post_fap_save_seo',       [$this, 'handle_save_seo']);
         add_action('admin_post_fap_save_features',  [$this, 'handle_save_features']);
         add_action('admin_post_fap_quick_post',     [$this, 'handle_quick_post']);
+        add_action('admin_post_fap_cid_post',       [$this, 'handle_cid_post']);
         add_action('admin_post_fap_clear_log',      [$this, 'handle_clear_log']);
         add_action('admin_post_fap_export',             [$this, 'handle_export']);
         add_action('admin_post_fap_import',             [$this, 'handle_import']);
@@ -831,6 +832,18 @@ class FAP_Admin {
             </button>
             <span class="description" style="margin-left:8px;font-size:11px;">※保存済みの設定でプレビューします</span>
         </div>
+
+        <details style="margin:8px 0 12px;">
+            <summary style="cursor:pointer;">🔎 商品IDを指定して投稿</summary>
+            <form method="post" action="<?= esc_url(admin_url('admin-post.php')) ?>" style="margin-top:8px;">
+                <?php wp_nonce_field(FAP_NONCE, '_fap_nonce'); ?>
+                <input type="hidden" name="action" value="fap_cid_post">
+                <input type="hidden" name="slot"   value="<?= $slot ?>">
+                <textarea name="cids" rows="3" class="large-text" placeholder="d_789035&#10;d_123456"></textarea>
+                <p class="description">商品ID（content_id）を、改行またはカンマ区切りで最大20件まで。FANZAの商品ページURL（…/cid=d_789035/）を貼ってもIDを取り出します。<br>このスロットの<strong>保存済みの設定</strong>（フロア・テンプレート・タグ・カテゴリなど）で投稿します。フロアが違うIDや、存在しないIDはエラーになります。投稿済みのIDは重複チェックでエラーになります。</p>
+                <button type="submit" class="button">▶ 商品IDで投稿</button>
+            </form>
+        </details>
 
         <div class="fap-preview" id="fap-preview-<?= $slot ?>" style="display:none;">
             <div class="fap-card">
@@ -2154,6 +2167,64 @@ class FAP_Admin {
         if ($result['error']) $msg .= '（' . $result['error'] . '）';
 
         set_transient('fap_notice_info', esc_html($msg), 30);
+        $this->redirect_back();
+    }
+
+    // -----------------------------------------------------------------------
+    // フォームハンドラ：商品IDを指定して投稿
+    // -----------------------------------------------------------------------
+    public function handle_cid_post(): void {
+        $this->verify_nonce();
+
+        $slot = (int) ($_POST['slot'] ?? 0);
+        if ($slot < 1 || $slot > FAP_SLOTS) wp_die('スロット番号が不正です');
+        if ($slot > FAP_License::max_slots()) {
+            set_transient('fap_notice_error', "スロット {$slot} はご利用のプランでは使用できません。ライセンスページからアップグレードしてください。", 30);
+            $this->redirect_back();
+        }
+
+        // 区切り（改行・空白・カンマ）で分割。FANZAのURL（…/cid=xxxx/）を貼っても、IDを取り出す
+        $raw    = (string) wp_unslash($_POST['cids'] ?? '');
+        $cids   = [];
+        $errors = [];
+        foreach (preg_split('/[\s,、，]+/u', trim($raw)) as $token) {
+            if ($token === '') continue;
+            if (preg_match('/cid=([A-Za-z0-9_\-]+)/i', $token, $m)) {
+                $cids[] = $m[1];
+            } elseif (preg_match('/^[A-Za-z0-9_\-]+$/', $token)) {
+                $cids[] = $token;
+            } else {
+                $errors[] = $token . ': 商品IDの形式が正しくありません';
+            }
+        }
+        $cids = array_values(array_unique($cids));
+
+        if (!$cids && !$errors) {
+            set_transient('fap_notice_error', '商品IDを入力してください。', 30);
+            $this->redirect_back();
+        }
+        if (count($cids) > 20) {
+            set_transient('fap_notice_error', '一度に指定できる商品IDは20件までです。', 30);
+            $this->redirect_back();
+        }
+
+        $posted = 0;
+        if ($cids) {
+            set_time_limit(600);
+            ini_set('memory_limit', '512M');
+
+            $poster = new FAP_Poster(new FAP_API());
+            $result = $poster->run_cids($slot, $cids);
+            $posted = (int) $result['posted'];
+            $errors = array_merge($errors, $result['errors']);
+        }
+
+        if ($posted > 0) {
+            set_transient('fap_notice_info', esc_html("スロット {$slot}：商品ID指定で {$posted} 件を投稿しました。"), 30);
+        }
+        if ($errors) {
+            set_transient('fap_notice_error', implode(' ／ ', $errors), 30);
+        }
         $this->redirect_back();
     }
 
