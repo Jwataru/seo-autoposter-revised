@@ -198,6 +198,13 @@ function fap_bootstrap() {
         global $fap_admin_instance;
         $fap_admin_instance = new FAP_Admin();
         new FAP_Diff(); // AIリライトの差分表示（記事編集画面・投稿一覧）
+        // ランダム文の文字化け（u306eu30bb…）を、更新後に1回だけ修復する
+        add_action('admin_init', function () {
+            if (get_option('fap_repair_unicode_v1') === '1') return;
+            $r = FAP_Poster::repair_garbled_unicode();
+            update_option('fap_repair_unicode_v1', '1');
+            fap_log('[Repair] 文字化け修復: メタ ' . $r['meta'] . ' 件 / タイトル ' . $r['titles'] . ' 件');
+        });
     }
 }
 add_action('plugins_loaded', 'fap_bootstrap', 10);
