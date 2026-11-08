@@ -545,7 +545,8 @@ class FAP_Poster {
             '_fap_cid'           => $cid,
             '_fap_title'         => $title,
             '_fap_title_tpl'     => $title_tpl, // セール検知時に同じテンプレートで描き直すため
-            '_fap_randoms'       => wp_json_encode($d['randoms'] ?? []), // 同上（[random1]〜[random3]の選択結果）
+            // 同上（[random1]〜[random3]の選択結果）。update_post_meta は値の「\」を取り除くため、wp_slash が必須
+            '_fap_randoms'       => wp_slash(wp_json_encode($d['randoms'] ?? [], JSON_UNESCAPED_UNICODE)),
             '_fap_ai_desc'       => $this->ai_desc_result, // AIでリライトした作品説明文（再描画で使い回す。空=AI未使用）
             '_fap_ai_desc_src'   => $this->ai_desc_src,    // リライト前の作品説明文（差分表示用）
             '_fap_actress'       => implode(', ', array_column($actress_arr,   'name')),
@@ -759,13 +760,59 @@ class FAP_Poster {
 
         // [random1]〜[random3] は投稿時に選ばれた行を使い回す（描き直しのたびにタイトルが変わらないように）
         $saved_randoms = json_decode((string) get_post_meta($post_id, '_fap_randoms', true), true);
-        if (is_array($saved_randoms) && $saved_randoms) $d['randoms'] = $saved_randoms;
+        if (is_array($saved_randoms) && $saved_randoms) {
+            foreach ($saved_randoms as $k => $v) {
+                if (is_string($v)) $saved_randoms[$k] = self::restore_stripped_unicode($v);
+            }
+            $d['randoms'] = $saved_randoms;
+        }
 
         $tpl = (string) get_post_meta($post_id, '_fap_title_tpl', true);
         if ($tpl === '') {
             $tpl = fap_slot_opt($slot, 'title_tpl', '[title]') ?: '[title]';
         }
         return wp_strip_all_tags($this->render_title($tpl, $d));
+    }
+
+    // 「\u306e\u30bb…」の「\」が取り除かれて「u306eu30bb…」になった文字列を、元の文字へ戻す
+    public static function restore_stripped_unicode(string $s): string {
+        return preg_replace_callback('/(?:u[0-9a-fA-F]{4})+/', static function (array $m): string {
+            $bin = hex2bin(str_replace('u', '', $m[0]));
+            if ($bin === false) return $m[0];
+            $out = mb_convert_encoding($bin, 'UTF-8', 'UTF-16BE');
+            return $out !== '' ? $out : $m[0];
+        }, $s);
+    }
+
+    // 化けて保存されてしまった「ランダム文のメタ」と「記事タイトル」を修復する（1回だけ実行）
+    public static function repair_garbled_unicode(): array {
+        global $wpdb;
+        $fixed_meta   = 0;
+        $fixed_titles = 0;
+
+        $rows = $wpdb->get_results("SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_fap_randoms' AND meta_value REGEXP 'u[0-9a-fA-F]{4}'");
+        foreach ((array) $rows as $r) {
+            $arr = json_decode((string) $r->meta_value, true);
+            if (!is_array($arr)) continue;
+            foreach ($arr as $k => $v) {
+                if (is_string($v)) $arr[$k] = self::restore_stripped_unicode($v);
+            }
+            update_post_meta((int) $r->post_id, '_fap_randoms', wp_slash(wp_json_encode($arr, JSON_UNESCAPED_UNICODE)));
+            $fixed_meta++;
+        }
+
+        // 連続する2文字以上が化けているタイトルだけを対象にする（誤検出を避けるため）
+        $posts = $wpdb->get_results("SELECT ID, post_title FROM {$wpdb->posts} WHERE post_type = 'post' AND post_title REGEXP 'u[0-9a-fA-F]{4}u[0-9a-fA-F]{4}'");
+        foreach ((array) $posts as $row) {
+            $new = self::restore_stripped_unicode((string) $row->post_title);
+            if ($new !== '' && $new !== $row->post_title) {
+                $wpdb->update($wpdb->posts, ['post_title' => $new], ['ID' => (int) $row->ID]);
+                clean_post_cache((int) $row->ID);
+                $fixed_titles++;
+            }
+        }
+
+        return ['meta' => $fixed_meta, 'titles' => $fixed_titles];
     }
 
     // タイトルだけを描画し直して保存する（セール中の値下げ・セール終了後の掃除用）
