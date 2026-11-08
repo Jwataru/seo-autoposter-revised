@@ -17,6 +17,13 @@ class FAP_Diff {
         add_filter('manage_posts_columns', [$this, 'add_column']);
         add_action('manage_posts_custom_column', [$this, 'render_column'], 10, 2);
         add_action('admin_head', [$this, 'print_css']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue']);
+        add_action('admin_post_fap_diff_view', [$this, 'view_page']); // 一覧の「差分」ポップアップの中身
+    }
+
+    // 投稿一覧では、WordPress標準のポップアップ（Thickbox）を使えるようにする
+    public function enqueue(string $hook): void {
+        if ($hook === 'edit.php') add_thickbox();
     }
 
     // -----------------------------------------------------------------------
@@ -64,8 +71,13 @@ class FAP_Diff {
     }
 
     public function render_box(WP_Post $post): void {
-        $sets = $this->collect_sets($post);
         echo '<div class="fap-diff">';
+        $this->print_sets($this->collect_sets($post));
+        echo '</div>';
+    }
+
+    // 差分セットを画面に出力する（編集画面のメタボックスと、一覧のポップアップで共通）
+    private function print_sets(array $sets): void {
         echo '<p class="fap-diff-legend"><del>削除された部分</del> <ins>追加された部分</ins></p>';
 
         foreach ($sets as $set) {
@@ -87,7 +99,35 @@ class FAP_Diff {
             }
         }
         echo '<p class="description">「現在」との差分です。記事を手で編集した場合は、その編集も差分に含まれます。</p>';
-        echo '</div>';
+    }
+
+    // 一覧の「差分」ポップアップに表示する、専用ページ
+    public function view_page(): void {
+        $post_id = (int) ($_GET['post_id'] ?? 0);
+        if (!$post_id || !current_user_can('edit_post', $post_id)) wp_die('権限がありません。', '', ['response' => 403]);
+        if (!wp_verify_nonce($_GET['_wpnonce'] ?? '', 'fap_diff_' . $post_id)) wp_die('リンクの有効期限が切れました。一覧を再読み込みしてください。', '', ['response' => 403]);
+
+        $post = get_post($post_id);
+        if (!$post) wp_die('記事が見つかりません。');
+        $sets = $this->collect_sets($post);
+
+        nocache_headers();
+        header('Content-Type: text/html; charset=utf-8');
+        echo '<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+           . '<title>AIリライトの差分</title><style>'
+           . 'body{margin:0;padding:16px;font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1d2327;background:#f6f7f7;}'
+           . 'h1{font-size:16px;margin:0 0 8px;} .fap-diff-head{margin-bottom:12px;} .description{color:#646970;font-size:12px;}'
+           . $this->css_rules()
+           . '</style></head><body>';
+        echo '<div class="fap-diff-head"><h1>' . esc_html(get_the_title($post)) . '</h1>'
+           . '<a href="' . esc_url(get_edit_post_link($post_id, 'raw')) . '" target="_top">✏️ 記事を編集する</a></div>';
+        if ($sets) {
+            $this->print_sets($sets);
+        } else {
+            echo '<p>差分はありません。</p>';
+        }
+        echo '</body></html>';
+        exit;
     }
 
     // -----------------------------------------------------------------------
@@ -102,24 +142,32 @@ class FAP_Diff {
         if ($col !== 'fap_ai') return;
         $post = get_post($post_id);
         if (!$post || !$this->collect_sets($post)) { echo '—'; return; }
-        printf('<a href="%s">差分</a>', esc_url(get_edit_post_link($post_id) . '#fap_ai_diff'));
+        $url = add_query_arg([
+            'action'    => 'fap_diff_view',
+            'post_id'   => $post_id,
+            '_wpnonce'  => wp_create_nonce('fap_diff_' . $post_id),
+            'TB_iframe' => 'true',
+            'width'     => 900,
+            'height'    => 640,
+        ], admin_url('admin-post.php'));
+        // JSが使えない場合も、リンクとして普通に開ける
+        printf('<a href="%s" class="thickbox" title="AIリライトの差分">差分</a>', esc_url($url));
     }
 
     public function print_css(): void {
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
         if (!$screen || !in_array($screen->base, ['post', 'edit'], true)) return;
-        ?>
-        <style>
-            .fap-diff-legend del, .fap-diff-body del { background:#fde2e2; color:#b32d2e; text-decoration:line-through; }
-            .fap-diff-legend ins, .fap-diff-body ins { background:#dcfce7; color:#166534; text-decoration:none; }
-            .fap-diff-set  { margin:14px 0 4px; padding-top:8px; border-top:1px solid #dcdcde; }
-            .fap-diff-stat { color:#646970; font-size:12px; }
-            .fap-diff-body { white-space:pre-wrap; word-break:break-all; max-height:380px; overflow:auto;
-                             background:#fff; border:1px solid #dcdcde; border-radius:4px; padding:10px; line-height:1.7; font-size:13px; }
-            .fap-diff-warn { background:#fff8e5; border-left:4px solid #dba617; padding:8px 12px; margin:6px 0; font-size:13px; }
-            .column-fap_ai { width:64px; }
-        </style>
-        <?php
+        echo '<style>' . $this->css_rules() . '</style>';
+    }
+
+    private function css_rules(): string {
+        return '.fap-diff-legend del,.fap-diff-body del{background:#fde2e2;color:#b32d2e;text-decoration:line-through;}'
+             . '.fap-diff-legend ins,.fap-diff-body ins{background:#dcfce7;color:#166534;text-decoration:none;}'
+             . '.fap-diff-set{margin:14px 0 4px;padding-top:8px;border-top:1px solid #dcdcde;}'
+             . '.fap-diff-stat{color:#646970;font-size:12px;}'
+             . '.fap-diff-body{white-space:pre-wrap;word-break:break-all;max-height:380px;overflow:auto;background:#fff;border:1px solid #dcdcde;border-radius:4px;padding:10px;line-height:1.7;font-size:13px;}'
+             . '.fap-diff-warn{background:#fff8e5;border-left:4px solid #dba617;padding:8px 12px;margin:6px 0;font-size:13px;}'
+             . '.column-fap_ai{width:64px;}';
     }
 
     // -----------------------------------------------------------------------
