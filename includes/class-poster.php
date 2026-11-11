@@ -2245,6 +2245,7 @@ class FAP_Poster {
             'service'    => $fp['service'],
             'floor'      => $fp['floor'],
             'sort'       => $sort,
+            'keyword'    => trim((string) $this->ropt('keyword', '')), // 空欄なら絞り込みなし
             'skip_dedup' => true,
             // セール中の作品に限定（セール特化サイト向け。search側のsale_onlyフィルタを再利用）
             'sale_only'  => $this->ropt('sale_only', '0') === '1',

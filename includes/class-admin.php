@@ -2602,6 +2602,7 @@ class FAP_Admin {
             'floor'        => fap_opt($pfx . 'floor',        ''),
             'flr_name'     => fap_opt($pfx . 'flr_name',     ''),
             'sort'         => fap_opt($pfx . 'sort',         'rank'),
+            'keyword'      => fap_opt($pfx . 'keyword',      ''),
             'count'        => fap_opt($pfx . 'count',        10),
             'title_tpl'    => fap_opt($pfx . 'title_tpl',    '[year]年[month]月 FANZAランキング TOP[count]'),
             'post_status'  => fap_opt($pfx . 'post_status',  'publish'),
@@ -2717,6 +2718,13 @@ class FAP_Admin {
                                 <option value="<?= $val ?>" <?php selected($v['sort'], $val) ?>><?= $lbl ?></option>
                                 <?php endforeach; ?>
                             </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>キーワード</th>
+                        <td>
+                            <input type="text" name="ranking_keyword" value="<?= esc_attr($v['keyword']) ?>" class="regular-text" placeholder="例: NTR（空欄なら絞り込みなし）">
+                            <p class="description">指定したキーワードに合う作品の中で、上のソート順（人気順・評価順）の上位を並べます。スペース区切りで複数指定すると、すべてを含む作品に絞ります。ジャンルやサークルを固定したランキング（例:「NTR人気TOP10」）を作るときに使います。</p>
                         </td>
                     </tr>
                     <tr>
@@ -2869,7 +2877,7 @@ class FAP_Admin {
         $rk  = max(1, min(4, (int) ($_POST['rk'] ?? 1)));
         $pfx = $rk <= 1 ? 'ranking_' : 'ranking' . $rk . '_';
 
-        $text_fields = ['floor', 'flr_name', 'sort',
+        $text_fields = ['floor', 'flr_name', 'sort', 'keyword',
                         'title_tpl', 'post_status',
                         'cate_fixed', 'tag_fixed', 'schedule'];
         foreach ($text_fields as $key) {
