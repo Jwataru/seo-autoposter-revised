@@ -930,7 +930,8 @@ class FAP_Poster {
         $aff_card_html       = $this->build_link_card($d['aff_url'], $d['title'], $d['pkg_img']);
         $tachiyomi_card_html = $this->build_link_card($tachiyomi_url, $d['title'], $d['pkg_img']);
 
-        $first_genre = !empty($d['genre_arr']) ? $d['genre_arr'][0]['name'] : '';
+        $first_genre   = !empty($d['genre_arr'])   ? $d['genre_arr'][0]['name']   : '';
+        $first_actress = !empty($d['actress_arr']) ? $d['actress_arr'][0]['name'] : '';
 
         // サンプル画像 SEO テキスト（元プラグインと同仕様）
         $sample_intro = '<p>ここでは、公式で公開されている<strong>『' . esc_html($d['title']) . '』</strong>の無料サンプル画像を掲載しています。'
@@ -968,6 +969,7 @@ class FAP_Poster {
             '[sample-outro]'   => $sample_outro,
             '[related-maker]'  => $this->build_related_archive_link('同じメーカーの作品', $maker_str, 'category'),
             '[related-genre]'  => $this->build_related_archive_link('同じジャンルの作品', $first_genre, 'post_tag'),
+            '[related-actress]' => $this->build_related_archive_link('同じ出演者の作品', $first_actress, 'post_tag'),
         ]);
 
         // 画像系
@@ -1281,7 +1283,7 @@ class FAP_Poster {
     // 関連記事ボックス
     // -----------------------------------------------------------------------
 
-    // [related-maker] / [related-genre] 用：カテゴリ/タグのアーカイブリンクボックス
+    // [related-maker] / [related-genre] / [related-actress] 用：カテゴリ/タグのアーカイブリンクボックス
     private function build_related_archive_link(string $label, string $name, string $taxonomy): string {
         $name = trim(wp_strip_all_tags($name));
         if ($name === '') return '';
