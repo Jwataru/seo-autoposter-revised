@@ -8,6 +8,9 @@ class FAP_API {
 
     const API_BASE = 'https://api.dmm.com/affiliate/v3/';
 
+    // 直近の search() の集計（調べた件数・各理由で除外した件数）。呼び出し側がログ・メッセージに使う
+    public array $last_stats = ['scanned' => 0, 'dup' => 0, 'sale' => 0, 'filtered' => 0, 'pages' => 0];
+
     // -----------------------------------------------------------------------
     // 低レベル HTTP（wp_remote_get 使用でサーバー互換性を最大化）
     // -----------------------------------------------------------------------
@@ -121,13 +124,17 @@ class FAP_API {
 
         $sale_only  = !empty($params['sale_only']);
         $skip_dedup = !empty($params['skip_dedup']);
+        // 呼び出し側の除外判定（NGワード・除外条件など）。true を返した作品だけを採用する。
+        // 取得のループの中で判定するので、除外された作品は件数（$hits）に数えず、次のページへ進む。
+        $filter     = (isset($params['filter']) && is_callable($params['filter'])) ? $params['filter'] : null;
+        $stats      = ['scanned' => 0, 'dup' => 0, 'sale' => 0, 'filtered' => 0, 'pages' => 0];
 
         fap_log('[API][Search] site=' . $base['site'] . ' service=' . $base['service'] . ' floor=' . $base['floor'] . ' hits=' . $hits . ($sale_only ? ' sale_only=1' : ''));
 
         $items      = [];
         $offset     = 1;
         $batch_size = 100;
-        $max_loops  = 20;
+        $max_loops  = max(1, (int) ($params['max_pages'] ?? 20)); // 調べるページ数の上限（1ページ=100件）
         $loop       = 0;
 
         while (count($items) < $hits && $loop < $max_loops) {
@@ -148,13 +155,16 @@ class FAP_API {
             }
 
             $batch = $items_raw;
+            $stats['pages']++;
 
             foreach ($batch as $item) {
                 if (count($items) >= $hits) break;
                 $cid = (string) ($item->content_id ?? '');
                 if (!$cid) continue;
-                if (!$skip_dedup && $this->already_posted($cid)) continue;
-                if ($sale_only && !$this->is_on_sale($item)) continue;
+                $stats['scanned']++;
+                if (!$skip_dedup && $this->already_posted($cid)) { $stats['dup']++;  continue; }
+                if ($sale_only && !$this->is_on_sale($item))     { $stats['sale']++; continue; }
+                if ($filter && !$filter($item))                  { $stats['filtered']++; continue; }
                 $items[] = $item;
             }
 
@@ -162,7 +172,10 @@ class FAP_API {
             $offset += $batch_size;
         }
 
-        fap_log('[API][Search] 最終取得数=' . count($items));
+        $this->last_stats = $stats;
+        fap_log('[API][Search] 最終取得数=' . count($items)
+            . ' / 調べた件数=' . $stats['scanned'] . '（' . $stats['pages'] . 'ページ）'
+            . ' 投稿済み除外=' . $stats['dup'] . ' セール対象外=' . $stats['sale'] . ' NG・除外条件=' . $stats['filtered']);
         return $items;
     }
 

@@ -8,6 +8,9 @@ class FAP_Poster {
 
     private FAP_API $api;
 
+    // 取得ループの中で除外した理由の内訳（run_slot の結果メッセージ用）
+    private array $filter_stats = ['blacklist' => 0, 'excluded' => 0, 'dup' => 0];
+
     // 作品説明文のAIリライト用（assemble_data 内で参照）
     private bool    $ai_desc_enabled  = false; // 新規投稿の組み立て中だけ true
     private ?string $ai_desc_override = null;  // 再描画時：投稿時に保存したAI文（空文字=AIなし→原文を使う）
@@ -68,9 +71,13 @@ class FAP_Poster {
             $this->apply_auto_date_filter($params);
         }
 
+        // NGワード・除外条件・重複は、取得のループの中で判定する（除外された作品は件数に数えず、次のページへ進む）
+        $params['filter']    = $this->build_item_filter($slot);
+        $params['max_pages'] = 10; // 最大1,000件まで調べる（API 10回）
+
         $items = $this->api->search($params, $hits);
         if (empty($items)) {
-            return $this->result(0, 0, '対象作品が見つかりませんでした。');
+            return $this->result(0, 0, $this->no_item_message());
         }
 
         $posted  = 0;
@@ -84,6 +91,44 @@ class FAP_Poster {
         }
 
         return $this->result($posted, $skipped, '');
+    }
+
+    // -----------------------------------------------------------------------
+    // 作品の採用判定（true=採用）。API取得ループの中で呼ばれる。
+    // 判定の中身は post_item() と同じ（NGワード・除外条件・重複）。
+    // -----------------------------------------------------------------------
+    private function build_item_filter(int $slot): callable {
+        $this->filter_stats = ['blacklist' => 0, 'excluded' => 0, 'dup' => 0];
+        $blacklist = fap_slot_opt($slot, 'blacklist', '');
+        $is_pro    = FAP_License::is('pro');
+        $dedup     = fap_opt('feat_dedup', '1') === '1';
+
+        return function (object $item) use ($slot, $blacklist, $is_pro, $dedup): bool {
+            $title = (string) ($item->title ?? '');
+            $cid   = (string) ($item->content_id ?? '');
+            if (!$cid || !$title) return false;
+
+            if ($blacklist && $this->is_blacklisted($title, $blacklist)) { $this->filter_stats['blacklist']++; return false; }
+            if ($is_pro && $this->is_excluded_pro($item, $slot))         { $this->filter_stats['excluded']++;  return false; }
+            if ($dedup && $this->cid_exists($cid))                       { $this->filter_stats['dup']++;       return false; }
+            return true;
+        };
+    }
+
+    // 対象が1件も見つからなかったときのメッセージ（調べた件数と除外の内訳つき）
+    private function no_item_message(): string {
+        $s  = $this->api->last_stats;
+        $fs = $this->filter_stats;
+        if (($s['scanned'] ?? 0) < 1) return '対象作品が見つかりませんでした。';
+
+        $parts = [];
+        if (($s['dup'] ?? 0) + ($fs['dup'] ?? 0) > 0) $parts[] = '投稿済み ' . ((int) $s['dup'] + (int) $fs['dup']) . '件';
+        if (($fs['blacklist'] ?? 0) > 0)              $parts[] = 'NGワード ' . (int) $fs['blacklist'] . '件';
+        if (($fs['excluded'] ?? 0) > 0)               $parts[] = '除外条件 ' . (int) $fs['excluded'] . '件';
+        if (($s['sale'] ?? 0) > 0)                    $parts[] = 'セール対象外 ' . (int) $s['sale'] . '件';
+
+        return '対象作品が見つかりませんでした（' . (int) $s['scanned'] . '件を調べ、' . ($parts ? implode('・', $parts) . 'を除外' : '条件に合う作品なし') . '）。'
+             . 'キーワード・除外条件・日付範囲を見直してください。';
     }
 
     // -----------------------------------------------------------------------
@@ -344,6 +389,8 @@ class FAP_Poster {
             'sort'    => fap_slot_opt($slot, 'sort', 'rank'),
             'keyword' => fap_slot_opt($slot, 'keyword', ''),
         ];
+        $params['filter']    = $this->build_item_filter($slot);
+        $params['max_pages'] = 5;
         $items = $this->api->search($params, 1);
         if (empty($items)) {
             return ['ok' => false, 'msg' => 'プレビュー対象の作品が取得できませんでした。'];
