@@ -175,13 +175,13 @@ class FAP_Poster {
 
         // 価格
         if (isset($item->prices->list_price)) {
-            $price = (string) $item->prices->list_price;
+            $price = fap_clean_price((string) $item->prices->list_price);
         } elseif (isset($item->prices->price)) {
-            $price = (string) $item->prices->price;
+            $price = fap_clean_price((string) $item->prices->price);
         }
 
         // セール価格（定価 list_price と販売価格 price が両方ある = セール中のみ）
-        $sale_price = $this->api->is_on_sale($item) ? (string) $item->prices->price : '';
+        $sale_price = $this->api->is_on_sale($item) ? fap_clean_price((string) $item->prices->price) : '';
 
         // 発売日
         $release_date = isset($item->date) ? substr((string)$item->date, 0, 10) : '';
@@ -782,6 +782,43 @@ class FAP_Poster {
             $out = mb_convert_encoding($bin, 'UTF-8', 'UTF-16BE');
             return $out !== '' ? $out : $m[0];
         }, $s);
+    }
+
+    // 価格の「~」を取り除く：メタ（_fap_sale_price / _fap_price）と、FAP記事のタイトル（「100~円」→「100円」）。1回だけ実行
+    public static function repair_price_tilde(): array {
+        global $wpdb;
+        $fixed_meta   = 0;
+        $fixed_titles = 0;
+
+        foreach (['_fap_sale_price', '_fap_price'] as $key) {
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT meta_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s AND (meta_value LIKE %s OR meta_value LIKE %s OR meta_value LIKE %s)",
+                $key, '%~%', '%〜%', '%～%'
+            ));
+            foreach ((array) $rows as $r) {
+                $new = fap_clean_price($r->meta_value);
+                if ($new !== $r->meta_value) {
+                    $wpdb->update($wpdb->postmeta, ['meta_value' => $new], ['meta_id' => (int) $r->meta_id]);
+                    $fixed_meta++;
+                }
+            }
+        }
+
+        // 「数字＋~＋円」の形だけを対象にする（作品名の「～」を巻き込まない）
+        $posts = $wpdb->get_results(
+            "SELECT p.ID, p.post_title FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_fap_cid'
+             WHERE p.post_type = 'post' AND (p.post_title LIKE '%~円%' OR p.post_title LIKE '%〜円%' OR p.post_title LIKE '%～円%')"
+        );
+        foreach ((array) $posts as $row) {
+            $new = preg_replace('/(\d[\d,]*)[~〜～]円/u', '$1円', (string) $row->post_title);
+            if ($new !== null && $new !== $row->post_title) {
+                $wpdb->update($wpdb->posts, ['post_title' => $new], ['ID' => (int) $row->ID]);
+                clean_post_cache((int) $row->ID);
+                $fixed_titles++;
+            }
+        }
+        return ['meta' => $fixed_meta, 'titles' => $fixed_titles];
     }
 
     // 化けて保存されてしまった「ランダム文のメタ」と「記事タイトル」を修復する（1回だけ実行）
@@ -1791,7 +1828,7 @@ class FAP_Poster {
 
             if ($is_on_sale && !$was_on_sale) {
                 $sale_price = '';
-                if ($item && isset($item->prices->price)) $sale_price = (string) $item->prices->price;
+                if ($item && isset($item->prices->price)) $sale_price = fap_clean_price((string) $item->prices->price);
                 $this->apply_sale_badge($post->ID, $sale_price, $item);
                 FAP_Sale_History::log($cid, $post->ID, 'start', $list_price, (int) $sale_price);
                 if ($rerender && $item && $this->rerender_content($post->ID, $item)) $rerendered++;
@@ -2519,7 +2556,7 @@ class FAP_Poster {
 
         // セール状態と条件分岐タグ（[fap_if_sale]〜[/fap_if_sale] / [fap_if_not_sale]〜）
         $on_sale    = $this->api->is_on_sale($item);
-        $sale_price = ($on_sale && isset($item->prices->price)) ? (string) $item->prices->price : '';
+        $sale_price = ($on_sale && isset($item->prices->price)) ? fap_clean_price((string) $item->prices->price) : '';
         if ($on_sale) {
             $tpl = str_replace(['[fap_if_sale]', '[/fap_if_sale]'], '', $tpl);
             $tpl = preg_replace('/\[fap_if_not_sale\].*?\[\/fap_if_not_sale\]/s', '', $tpl);
@@ -2541,8 +2578,8 @@ class FAP_Poster {
         $author_arr   = $this->extract($item, 'author');
 
         $price = '';
-        if (isset($item->prices->list_price)) $price = (string) $item->prices->list_price;
-        elseif (isset($item->prices->price))  $price = (string) $item->prices->price;
+        if (isset($item->prices->list_price)) $price = fap_clean_price((string) $item->prices->list_price);
+        elseif (isset($item->prices->price))  $price = fap_clean_price((string) $item->prices->price);
 
         $avg = (float) ($item->review->average ?? 0);
         $cnt = (int)   ($item->review->count   ?? 0);

@@ -157,6 +157,11 @@ function fap_slot_opt(int $slot, string $key, $default = '') {
 }
 
 // 定価とセール価格から割引率ラベル（例: 30%OFF）を返す。算出できない場合は空文字
+// 価格表記の範囲記号を取り除く（FANZA APIは、価格が複数ある作品で「100~」のように返すことがある）。例: "100~" → "100"
+function fap_clean_price($price): string {
+    return trim(str_replace(['~', '〜', '～', '∼'], '', (string) $price));
+}
+
 function fap_discount_rate($list_price, $sale_price): string {
     $list = (int) preg_replace('/[^0-9]/', '', (string) $list_price);
     $sale = (int) preg_replace('/[^0-9]/', '', (string) $sale_price);
@@ -198,6 +203,13 @@ function fap_bootstrap() {
         global $fap_admin_instance;
         $fap_admin_instance = new FAP_Admin();
         new FAP_Diff(); // AIリライトの差分表示（記事編集画面・投稿一覧）
+        // 価格の「~」（100~円）を、更新後に1回だけ修復する
+        add_action('admin_init', function () {
+            if (get_option('fap_repair_tilde_v1') === '1') return;
+            $r = FAP_Poster::repair_price_tilde();
+            update_option('fap_repair_tilde_v1', '1');
+            fap_log('[Repair] 価格の「~」修復: メタ ' . $r['meta'] . ' 件 / タイトル ' . $r['titles'] . ' 件');
+        });
         // ランダム文の文字化け（u306eu30bb…）を、更新後に1回だけ修復する
         add_action('admin_init', function () {
             if (get_option('fap_repair_unicode_v1') === '1') return;

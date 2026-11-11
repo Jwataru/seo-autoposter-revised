@@ -77,7 +77,7 @@ class FAP_Frontend {
     // -----------------------------------------------------------------------
     private function current_sale_price(): string {
         $id = get_the_ID();
-        return $id ? (string) get_post_meta($id, '_fap_sale_price', true) : '';
+        return $id ? fap_clean_price((string) get_post_meta($id, '_fap_sale_price', true)) : '';
     }
 
     public function sc_sale_price(): string {
