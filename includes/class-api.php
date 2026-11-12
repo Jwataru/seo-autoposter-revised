@@ -96,9 +96,62 @@ class FAP_API {
     }
 
     // -----------------------------------------------------------------------
-    // 商品検索（重複スキップ込み）
+    // キーワード欄の分割（OR指定）。区切り: カンマ（, 、）・改行・縦棒（|）。最大5件。
+    // 1つのキーワードの中のスペースは、FANZA APIの仕様どおり「すべてを含む」絞り込みになる。
+    // -----------------------------------------------------------------------
+    public static function split_keywords(string $raw): array {
+        $parts = preg_split('/[,、，|｜\r\n]+/u', $raw) ?: [];
+        $out = [];
+        foreach ($parts as $p) {
+            $p = trim($p);
+            if ($p !== '' && !in_array($p, $out, true)) $out[] = $p;
+        }
+        return array_slice($out, 0, 5);
+    }
+
+    // -----------------------------------------------------------------------
+    // 商品検索（重複スキップ込み）。キーワードが複数（OR）なら、キーワードごとに検索して交互に混ぜる。
     // -----------------------------------------------------------------------
     public function search(array $params, int $hits): array {
+        $keywords = self::split_keywords((string) ($params['keyword'] ?? ''));
+
+        // キーワードが0〜1個：従来どおり
+        if (count($keywords) <= 1) {
+            if ($keywords) $params['keyword'] = $keywords[0];
+            return $this->search_one($params, $hits);
+        }
+
+        // 複数キーワード（OR）：各キーワードで最大 $hits 件ずつ取得し、交互に採用して重複（同じ作品）を除く
+        $lists = [];
+        $total = ['scanned' => 0, 'dup' => 0, 'sale' => 0, 'filtered' => 0, 'pages' => 0];
+        foreach ($keywords as $kw) {
+            $p            = $params;
+            $p['keyword'] = $kw;
+            $lists[]      = $this->search_one($p, $hits);
+            foreach ($total as $k => $_) $total[$k] += (int) ($this->last_stats[$k] ?? 0);
+        }
+
+        $out    = [];
+        $seen   = [];
+        $maxlen = 0;
+        foreach ($lists as $l) $maxlen = max($maxlen, count($l));
+        for ($i = 0; $i < $maxlen && count($out) < $hits; $i++) {
+            foreach ($lists as $l) {
+                if (!isset($l[$i]) || count($out) >= $hits) continue;
+                $cid = (string) ($l[$i]->content_id ?? '');
+                if ($cid === '' || isset($seen[$cid])) continue;
+                $seen[$cid] = true;
+                $out[]      = $l[$i];
+            }
+        }
+
+        $this->last_stats = $total;
+        fap_log('[API][Search] キーワードOR ' . count($keywords) . '件（' . implode(' / ', $keywords) . '）→ 採用 ' . count($out) . '件');
+        return $out;
+    }
+
+    // 1つのキーワード（または、キーワードなし）での検索
+    private function search_one(array $params, int $hits): array {
         $api_id = $params['api_id'];
         $aff_id = $params['aff_id'];
 

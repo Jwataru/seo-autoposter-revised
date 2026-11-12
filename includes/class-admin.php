@@ -944,7 +944,10 @@ class FAP_Admin {
                         <td>
                             <input type="text" id="fap_keyword" name="keyword"
                                    value="<?= esc_attr($v['keyword']) ?>" class="regular-text">
-                            <p class="description">空白の場合はフロア全体から取得します。</p>
+                            <p class="description">空白の場合はフロア全体から取得します。<br>
+                            <strong>複数指定（いずれかに合えばよい＝OR）</strong>: カンマ（<code>,</code>）または縦棒（<code>|</code>）で区切ります。最大5つまで。例: <code>NTR, 人妻</code> → 「NTR」または「人妻」の作品<br>
+                            1つのキーワードの中のスペースは「すべてを含む」絞り込み（AND）になります。例: <code>人妻 寝取られ, 幼なじみ</code> → 「人妻かつ寝取られ」または「幼なじみ」<br>
+                            複数指定すると、キーワードごとに検索して、交互に混ぜて採用します（同じ作品は1回だけ）。キーワードが多いほど、APIの呼び出しが増えます。</p>
                         </td>
                     </tr>
                     <tr>
